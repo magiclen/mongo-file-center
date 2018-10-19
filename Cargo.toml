@@ -1,0 +1,15 @@
+[package]
+name = "mongo-file-center"
+version = "0.1.0"
+authors = ["Magic Len <len@magiclen.org>"]
+edition = "2018"
+
+[dependencies]
+mongodb = { git = "https://github.com/magiclen/mongo-rust-driver-prototype", branch = "master" }
+#mongodb = "0.3.10"
+bson = "0.13"
+short-crypt = "1.0.4"
+lazy_static = "1.1.0"
+chrono = "0.4.6"
+sha3 = "0.8.0"
+mime_guess = "1.8.6"
