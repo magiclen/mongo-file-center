@@ -419,7 +419,7 @@ impl FileCenter {
                     "hash_2": hash_2,
                     "hash_3": hash_3,
                     "hash_4": hash_4,
-                    "file_name": file_name.to_string(),
+                    "file_name": file_name,
                     "file_size": file_size,
                     "count": 1
                 };
@@ -515,27 +515,15 @@ impl FileCenter {
                 };
 
                 if file_size >= self.file_size_threshold as u64 {
-//                    let store = Store::with_db(self.mongo_client_db.clone());
-//
-//                    let mut store_file: gridfs::file::File = store.create(file_name.clone()).map_err(|err| FileCenterError::MongoDBError(err))?;
-//
-//                    let mut file = File::open(file_path).map_err(|err| FileCenterError::IOError(err))?;
-//
-//                    let mut buffer = [0u8; FILE_BUFFER_SIZE];
-//
-//                    loop {
-//                        let c = file.read(&mut buffer).map_err(|err| FileCenterError::IOError(err))?;
-//
-//                        if c == 0 {
-//                            break;
-//                        }
-//
-//                        store_file.write(&buffer[..c]).map_err(|err| FileCenterError::IOError(err))?;
-//                    }
-//
-//                    let id = store_file.doc.id.clone();
-//
-//                    file_item_raw.insert("file_id", id);
+                    let store = Store::with_db(self.mongo_client_db.clone());
+
+                    let mut store_file: gridfs::file::File = store.create(file_name.to_string()).map_err(|err| FileCenterError::MongoDBError(err))?;
+
+                    store_file.write(&buffer).map_err(|err| FileCenterError::IOError(err))?;
+
+                    let id = store_file.doc.id.clone();
+
+                    file_item_raw.insert("file_id", id);
                 } else {
                     file_item_raw.insert("file_data", Bson::Binary(BinarySubtype::Generic, buffer));
                 }
