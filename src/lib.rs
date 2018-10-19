@@ -288,7 +288,7 @@ impl FileCenter {
     }
 
     /// Decrypt a ID token to an Object ID.
-    pub fn decrypt_id_token(&self, id_token: &IDToken) -> Result<ObjectId, FileCenterError> {
+    pub fn decrypt_id_token(&self, id_token: &str) -> Result<ObjectId, FileCenterError> {
         let id_raw = self.short_crypt.decrypt_url_component(id_token).map_err(|err| FileCenterError::IDTokenError(err))?;
 
         let id_raw: [u8; 12] = {

@@ -2,7 +2,17 @@
 name = "mongo-file-center"
 version = "0.1.0"
 authors = ["Magic Len <len@magiclen.org>"]
-edition = "2018"
+repository = "https://github.com/magiclen/mongo-file-center"
+homepage = "https://magiclen.org/mongo-file-center"
+keywords = ["mongodb", "storage", "file", "rocket"]
+categories = ["filesystem", "database", "web-programming"]
+description= "A library for validating user input."
+readme = "README.md"
+license = "MIT"
+
+[badges]
+travis-ci = { repository = "magiclen/mongo-file-center", branch = "master" }
+appveyor = { repository = "magiclen/mongo-file-center", branch = "master", service = "github" }
 
 [dependencies]
 mongodb = { git = "https://github.com/magiclen/mongo-rust-driver-prototype", branch = "master" }
@@ -14,3 +24,6 @@ chrono = "0.4.6"
 sha3 = "0.8.0"
 mime_guess = "1.8.6"
 regex = "1.0.5"
+
+[package.metadata.docs.rs]
+all-features = true
