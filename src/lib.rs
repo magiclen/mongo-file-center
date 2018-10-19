@@ -9,6 +9,7 @@ extern crate chrono;
 extern crate short_crypt;
 extern crate sha3;
 extern crate mime_guess;
+extern crate regex;
 
 use mongodb::{Client, ThreadedClient};
 use mongodb::db::{Database, ThreadedDatabase};
@@ -18,6 +19,8 @@ use mongodb::gridfs::{self, Store, ThreadedStore};
 use bson::oid::ObjectId;
 use bson::{Bson, Document};
 use bson::spec::BinarySubtype;
+
+use regex::Regex;
 
 use chrono::prelude::*;
 
@@ -40,6 +43,58 @@ const MAX_FILE_SIZE_THRESHOLD: i32 = 16770000;
 
 const SETTING_FILE_SIZE_THRESHOLD: &str = "file_size_threshold";
 const SETTING_CREATE_TIME: &str = "create_time";
+
+const TEMPORARY_LIFE_TIME: i64 = 60000;
+
+lazy_static! {
+    static ref FILE_ITEM_PROJECTION: Document = {
+        doc! {
+            "create_time": 1,
+            "mime_type": 1,
+            "file_size": 1,
+            "file_name": 1,
+            "file_data": 1,
+            "file_id": 1,
+            "expire_at": 1,
+        }
+    };
+    static ref FILE_ITEM_DELETE_PROJECTION: Document = {
+        doc! {
+            "_id": 1,
+            "count": 1,
+            "file_id": 1,
+            "file_size": 1,
+        }
+    };
+    static ref ID_PROJECTION: Document = {
+        doc! {
+            "_id": 1,
+        }
+    };
+    static ref FILE_ID_PROJECTION: Document = {
+        doc! {
+            "_id": 0,
+            "file_id": 1,
+        }
+    };
+    static ref FILE_ID_EXISTS: Document = {
+        doc! {
+            "file_id": {
+                "$exists": true
+            }
+        }
+    };
+    static ref COUNT_LTE_ZERO: Document = {
+        doc! {
+            "count": {
+                "$lte": 0
+            }
+        }
+    };
+    static ref MIME_TYPE_RE: Regex = {
+        Regex::new(r"^(([a-zA-Z0-9\-.+]+)/([a-zA-Z0-9\-.+]+))$").unwrap()
+    };
+}
 
 pub struct FileCenter {
     mongo_client_db: Database,
@@ -137,6 +192,7 @@ pub enum FileCenterError {
     IDTokenError(&'static str),
     FileSizeThresholdError,
     IOError(io::Error),
+    MimeTypeError,
 }
 
 impl FileCenter {
@@ -274,31 +330,29 @@ impl FileCenter {
     pub fn drop_file_center(self) -> Result<(), FileCenterError> {
         self.mongo_client_db.drop_collection(COLLECTION_FILES_NAME).map_err(|err| FileCenterError::MongoDBError(err))?;
         self.mongo_client_db.drop_collection(COLLECTION_SETTINGS_NAME).map_err(|err| FileCenterError::MongoDBError(err))?;
+        self.mongo_client_db.drop_collection("fs.files").map_err(|err| FileCenterError::MongoDBError(err))?;
         Ok(())
     }
 
     fn create_file_item(&self, mut document: Document) -> Result<FileItem, FileCenterError> {
-        let collection_files: Collection = self.mongo_client_db.collection(COLLECTION_FILES_NAME);
-
         let id = match document.remove("_id")
             .ok_or(FileCenterError::DocumentError(bson::ValueAccessError::NotPresent))? {
             Bson::ObjectId(b) => b,
-            _ => return Err(FileCenterError::DocumentError(bson::ValueAccessError::NotPresent))
+            _ => return Err(FileCenterError::DocumentError(bson::ValueAccessError::UnexpectedType))
         };
 
         let create_time = match document.remove("create_time")
             .ok_or(FileCenterError::DocumentError(bson::ValueAccessError::NotPresent))? {
             Bson::UtcDatetime(b) => b,
-            _ => return Err(FileCenterError::DocumentError(bson::ValueAccessError::NotPresent))
+            _ => return Err(FileCenterError::DocumentError(bson::ValueAccessError::UnexpectedType))
         };
 
         let expire_at = match document.remove("expire_at") {
             Some(expire_at) => match expire_at {
                 Bson::UtcDatetime(b) => {
-                    collection_files.delete_one(doc! {"_id": id.clone()}, None).map_err(|err| FileCenterError::MongoDBError(err))?;
                     Some(b)
                 }
-                _ => return Err(FileCenterError::DocumentError(bson::ValueAccessError::NotPresent))
+                _ => return Err(FileCenterError::DocumentError(bson::ValueAccessError::UnexpectedType))
             }
             None => None
         };
@@ -306,7 +360,7 @@ impl FileCenter {
         let mime_type = match document.remove("mime_type")
             .ok_or(FileCenterError::DocumentError(bson::ValueAccessError::NotPresent))? {
             Bson::String(b) => b,
-            _ => return Err(FileCenterError::DocumentError(bson::ValueAccessError::NotPresent))
+            _ => return Err(FileCenterError::DocumentError(bson::ValueAccessError::UnexpectedType))
         };
 
         let file_size = document.get_i64("file_size").map_err(|err| FileCenterError::DocumentError(err))? as u64;
@@ -314,19 +368,19 @@ impl FileCenter {
         let file_name = match document.remove("file_name")
             .ok_or(FileCenterError::DocumentError(bson::ValueAccessError::NotPresent))? {
             Bson::String(b) => b,
-            _ => return Err(FileCenterError::DocumentError(bson::ValueAccessError::NotPresent))
+            _ => return Err(FileCenterError::DocumentError(bson::ValueAccessError::UnexpectedType))
         };
 
         let file_data = match document.remove("file_data") {
             Some(file_data) => match file_data {
                 Bson::Binary(_, d) => FileData::Collection(d),
-                _ => return Err(FileCenterError::DocumentError(bson::ValueAccessError::NotPresent))
+                _ => return Err(FileCenterError::DocumentError(bson::ValueAccessError::UnexpectedType))
             }
             None => {
                 let file_id = match document.remove("file_id")
                     .ok_or(FileCenterError::DocumentError(bson::ValueAccessError::NotPresent))? {
                     Bson::ObjectId(b) => b,
-                    _ => return Err(FileCenterError::DocumentError(bson::ValueAccessError::NotPresent))
+                    _ => return Err(FileCenterError::DocumentError(bson::ValueAccessError::UnexpectedType))
                 };
 
                 let store = Store::with_db(self.mongo_client_db.clone());
@@ -351,25 +405,62 @@ impl FileCenter {
         let collection_files: Collection = self.mongo_client_db.collection(COLLECTION_FILES_NAME);
 
         let mut options = FindOptions::new();
-        options.projection = Some(
-            doc! {
-                "create_time": 1,
-                "mime_type": 1,
-                "file_size": 1,
-                "file_name": 1,
-                "file_data": 1,
-                "file_id": 1,
-                "expire_at": 1,
-            }
-        );
+        options.projection = Some(FILE_ITEM_PROJECTION.clone());
 
         let file_item = collection_files.find_one(Some(doc! {"_id": id.clone()}), Some(options)).map_err(|err| FileCenterError::MongoDBError(err))?;
 
         match file_item {
             Some(file_item) => {
+                if file_item.contains_key("expire_at") {
+                    collection_files.delete_one(doc! {"_id": id.clone()}, None).map_err(|err| FileCenterError::MongoDBError(err))?;
+                }
+
                 let file_item = self.create_file_item(file_item)?;
 
                 Ok(Some(file_item))
+            }
+            None => Ok(None)
+        }
+    }
+
+    /// Remove a file item searched via an Object ID.
+    pub fn delete_file_item_by_id(&self, id: &ObjectId) -> Result<Option<u64>, FileCenterError> {
+        let collection_files: Collection = self.mongo_client_db.collection(COLLECTION_FILES_NAME);
+
+        let mut options = FindOneAndUpdateOptions::new();
+        options.return_document = Some(ReturnDocument::After);
+        options.projection = Some(FILE_ITEM_DELETE_PROJECTION.clone());
+
+        let result = collection_files.find_one_and_update(doc! {
+            "_id": id.clone(),
+         }, doc! {
+            "$inc": {
+                "count": -1
+            }
+        }, Some(options)).map_err(|err| FileCenterError::MongoDBError(err))?;
+
+        match result {
+            Some(mut result) => {
+                let count = result.get_i32("count").map_err(|err| FileCenterError::DocumentError(err))?;
+                let file_size = result.get_i64("file_size").map_err(|err| FileCenterError::DocumentError(err))? as u64;
+
+                if count <= 0 {
+                    collection_files.delete_one(doc! {"_id": id.clone()}, None).map_err(|err| FileCenterError::MongoDBError(err))?;
+                    if let Some(file_id) = result.remove("file_id") {
+                        match file_id {
+                            Bson::ObjectId(file_id) => {
+                                let store = Store::with_db(self.mongo_client_db.clone());
+
+                                store.remove_id(file_id).map_err(|err| FileCenterError::MongoDBError(err))?;
+                            }
+                            _ => {
+                                return Err(FileCenterError::DocumentError(bson::ValueAccessError::UnexpectedType));
+                            }
+                        }
+                    }
+                }
+
+                Ok(Some(file_size))
             }
             None => Ok(None)
         }
@@ -385,6 +476,8 @@ impl FileCenter {
 
         let mut options = FindOneAndUpdateOptions::new();
         options.return_document = Some(ReturnDocument::After);
+        options.projection = Some(FILE_ITEM_PROJECTION.clone());
+
         let result = collection_files.find_one_and_update(doc! {
             "hash_1": hash_1,
             "hash_2": hash_2,
@@ -421,7 +514,7 @@ impl FileCenter {
                     "hash_4": hash_4,
                     "file_name": file_name,
                     "file_size": file_size,
-                    "count": 1
+                    "count": 1i32
                 };
 
                 if file_size >= self.file_size_threshold as u64 {
@@ -451,7 +544,12 @@ impl FileCenter {
                 }
 
                 let mime_type = match mime_type {
-                    Some(mime_type) => mime_type,
+                    Some(mime_type) => {
+                        if !MIME_TYPE_RE.is_match(mime_type) {
+                            return Err(FileCenterError::MimeTypeError);
+                        }
+                        mime_type
+                    }
                     None => {
                         match file_path.extension() {
                             Some(extension) => {
@@ -486,6 +584,8 @@ impl FileCenter {
 
         let mut options = FindOneAndUpdateOptions::new();
         options.return_document = Some(ReturnDocument::After);
+        options.projection = Some(FILE_ITEM_PROJECTION.clone());
+
         let result = collection_files.find_one_and_update(doc! {
             "hash_1": hash_1,
             "hash_2": hash_2,
@@ -511,7 +611,7 @@ impl FileCenter {
                     "hash_4": hash_4,
                     "file_name": file_name,
                     "file_size": file_size,
-                    "count": 1
+                    "count": 1i32
                 };
 
                 if file_size >= self.file_size_threshold as u64 {
@@ -529,7 +629,12 @@ impl FileCenter {
                 }
 
                 let mime_type = match mime_type {
-                    Some(mime_type) => mime_type,
+                    Some(mime_type) => {
+                        if !MIME_TYPE_RE.is_match(mime_type) {
+                            return Err(FileCenterError::MimeTypeError);
+                        }
+                        mime_type
+                    }
                     None => {
                         DEFAULT_MIME_TYPE
                     }
@@ -546,6 +651,308 @@ impl FileCenter {
                 Ok(self.create_file_item(file_item_raw)?)
             }
         }
+    }
+
+    /// Temporarily input a file to the file center via a file path.
+    pub fn put_file_by_path_temporarily<P: AsRef<Path>>(&self, file_path: P, file_name: Option<&str>, mime_type: Option<&str>) -> Result<FileItem, FileCenterError> {
+        let file_path = file_path.as_ref();
+
+        let collection_files: Collection = self.mongo_client_db.collection(COLLECTION_FILES_NAME);
+
+        let file_name = match file_name {
+            Some(file_name) => file_name,
+            None => {
+                file_path.file_name().unwrap().to_str().unwrap()
+            }
+        };
+
+        let mut file = File::open(file_path).map_err(|err| FileCenterError::IOError(err))?;
+
+        let metadata = file.metadata().map_err(|err| FileCenterError::IOError(err))?;
+
+        let file_size = metadata.len();
+
+        let mut file_item_raw: Document = doc! {
+            "file_name": file_name,
+            "file_size": file_size,
+            "count": 1i32
+        };
+
+        if file_size >= self.file_size_threshold as u64 {
+            let store = Store::with_db(self.mongo_client_db.clone());
+            let mut store_file: gridfs::file::File = store.create(file_name.to_string()).map_err(|err| FileCenterError::MongoDBError(err))?;
+            let mut file = File::open(file_path).map_err(|err| FileCenterError::IOError(err))?;
+            let mut buffer = [0u8; FILE_BUFFER_SIZE];
+
+            loop {
+                let c = file.read(&mut buffer).map_err(|err| FileCenterError::IOError(err))?;
+
+                if c == 0 {
+                    break;
+                }
+
+                store_file.write(&buffer[..c]).map_err(|err| FileCenterError::IOError(err))?;
+            }
+
+            let id = store_file.doc.id.clone();
+            file_item_raw.insert("file_id", id);
+            drop(file);
+        } else {
+            let mut file_data = Vec::new();
+            file.read_to_end(&mut file_data).map_err(|err| FileCenterError::IOError(err))?;
+            file_item_raw.insert("file_data", Bson::Binary(BinarySubtype::Generic, file_data));
+            drop(file);
+        }
+
+        let mime_type = match mime_type {
+            Some(mime_type) => {
+                if !MIME_TYPE_RE.is_match(mime_type) {
+                    return Err(FileCenterError::MimeTypeError);
+                }
+                mime_type
+            }
+            None => {
+                match file_path.extension() {
+                    Some(extension) => {
+                        match mime_guess::get_mime_type_str(&extension.to_str().unwrap().to_lowercase()) {
+                            Some(mime) => mime,
+                            None => DEFAULT_MIME_TYPE
+                        }
+                    }
+                    None => DEFAULT_MIME_TYPE
+                }
+            }
+        };
+
+        file_item_raw.insert("mime_type", mime_type);
+
+        let now = Utc::now();
+
+        let expire: DateTime<Utc> = Utc.timestamp_millis(now.timestamp_millis() + TEMPORARY_LIFE_TIME);
+
+        file_item_raw.insert("create_time", now);
+
+        file_item_raw.insert("expire_at", expire);
+
+        let result = collection_files.insert_one(file_item_raw.clone(), None).map_err(|err| FileCenterError::MongoDBError(err))?;
+
+        file_item_raw.insert("_id", result.inserted_id.unwrap());
+
+        Ok(self.create_file_item(file_item_raw)?)
+    }
+
+    /// Temporarily input a file to the file center via a buffer.
+    pub fn put_file_by_buffer_temporarily(&self, buffer: Vec<u8>, file_name: &str, mime_type: Option<&str>) -> Result<FileItem, FileCenterError> {
+        let collection_files: Collection = self.mongo_client_db.collection(COLLECTION_FILES_NAME);
+
+        let file_size = buffer.len() as u64;
+
+        let mut file_item_raw: Document = doc! {
+                    "file_name": file_name,
+                    "file_size": file_size,
+                    "count": 1i32
+                };
+
+        if file_size >= self.file_size_threshold as u64 {
+            let store = Store::with_db(self.mongo_client_db.clone());
+
+            let mut store_file: gridfs::file::File = store.create(file_name.to_string()).map_err(|err| FileCenterError::MongoDBError(err))?;
+
+            store_file.write(&buffer).map_err(|err| FileCenterError::IOError(err))?;
+
+            let id = store_file.doc.id.clone();
+
+            file_item_raw.insert("file_id", id);
+        } else {
+            file_item_raw.insert("file_data", Bson::Binary(BinarySubtype::Generic, buffer));
+        }
+
+        let mime_type = match mime_type {
+            Some(mime_type) => {
+                if !MIME_TYPE_RE.is_match(mime_type) {
+                    return Err(FileCenterError::MimeTypeError);
+                }
+                mime_type
+            }
+            None => {
+                DEFAULT_MIME_TYPE
+            }
+        };
+
+        file_item_raw.insert("mime_type", mime_type);
+
+        let now = Utc::now();
+
+        let expire: DateTime<Utc> = Utc.timestamp_millis(now.timestamp_millis() + TEMPORARY_LIFE_TIME);
+
+        file_item_raw.insert("create_time", now);
+
+        file_item_raw.insert("expire_at", expire);
+
+        let result = collection_files.insert_one(file_item_raw.clone(), None).map_err(|err| FileCenterError::MongoDBError(err))?;
+
+        file_item_raw.insert("_id", result.inserted_id.unwrap());
+
+        Ok(self.create_file_item(file_item_raw)?)
+    }
+
+    /// Remove all unused files in fs.files and in COLLECTION_FILES.
+    pub fn clear_garbage(&self) -> Result<(), FileCenterError> {
+        let collection_files: Collection = self.mongo_client_db.collection(COLLECTION_FILES_NAME);
+        let fs_files: Collection = self.mongo_client_db.collection("fs.files");
+
+        // unnecessary file items which have file_id but the target file does not exist
+        {
+            let files: Vec<Bson> = {
+                let mut options = FindOptions::new();
+                options.projection = Some(ID_PROJECTION.clone());
+
+                let mut result = fs_files.find(None, Some(options)).map_err(|err| FileCenterError::MongoDBError(err))?;
+
+                let mut array = Vec::new();
+
+                while result.has_next().map_err(|err| FileCenterError::MongoDBError(err))? {
+                    let mut doc = result.next().unwrap().map_err(|err| FileCenterError::MongoDBError(err))?;
+
+                    let id = doc.remove("_id").ok_or(FileCenterError::DocumentError(bson::ValueAccessError::NotPresent))?;
+                    match id {
+                        Bson::ObjectId(id) => array.push(Bson::ObjectId(id)),
+                        _ => return Err(FileCenterError::DocumentError(bson::ValueAccessError::UnexpectedType))
+                    }
+                }
+
+                array
+            };
+
+            if files.len() > 0 {
+                let afs: Vec<Bson> = {
+                    let mut options = FindOptions::new();
+                    options.projection = Some(ID_PROJECTION.clone());
+
+                    let mut result = collection_files.find(Some(doc! {
+                        "file_id": {
+                            "$nin": Bson::Array(files),
+                            "$exists": true
+                        }
+                     }), Some(options)).map_err(|err| FileCenterError::MongoDBError(err))?;
+
+                    let mut array = Vec::new();
+
+                    while result.has_next().map_err(|err| FileCenterError::MongoDBError(err))? {
+                        let mut doc = result.next().unwrap().map_err(|err| FileCenterError::MongoDBError(err))?;
+
+                        let id = doc.remove("_id").ok_or(FileCenterError::DocumentError(bson::ValueAccessError::NotPresent))?;
+                        match id {
+                            Bson::ObjectId(id) => array.push(Bson::ObjectId(id)),
+                            _ => return Err(FileCenterError::DocumentError(bson::ValueAccessError::UnexpectedType))
+                        }
+                    }
+
+                    array
+                };
+
+                if afs.len() > 0 {
+                    collection_files.delete_many(doc! {
+                        "_id": {
+                            "$in": Bson::Array(afs)
+                        }
+                    }, None).map_err(|err| FileCenterError::MongoDBError(err))?;
+                }
+            }
+        }
+
+        // unnecessary file items whose count are smaller than or equal to 0
+        {
+            let files: Vec<Bson> = {
+                let mut options = FindOptions::new();
+                options.projection = Some(ID_PROJECTION.clone());
+
+                let mut result = collection_files.find(Some(COUNT_LTE_ZERO.clone()), Some(options)).map_err(|err| FileCenterError::MongoDBError(err))?;
+
+                let mut array = Vec::new();
+
+                while result.has_next().map_err(|err| FileCenterError::MongoDBError(err))? {
+                    let mut doc = result.next().unwrap().map_err(|err| FileCenterError::MongoDBError(err))?;
+
+                    let id = doc.remove("_id").ok_or(FileCenterError::DocumentError(bson::ValueAccessError::NotPresent))?;
+                    match id {
+                        Bson::ObjectId(id) => array.push(Bson::ObjectId(id)),
+                        _ => return Err(FileCenterError::DocumentError(bson::ValueAccessError::UnexpectedType))
+                    }
+                }
+
+                array
+            };
+
+            if files.len() > 0 {
+                collection_files.delete_many(doc! {
+                    "_id": {
+                        "$in": Bson::Array(files)
+                    }
+                }, None).map_err(|err| FileCenterError::MongoDBError(err))?;
+            }
+        }
+
+        // unnecessary GridFS files which are not used in file items
+        {
+            let files: Vec<Bson> = {
+                let mut options = FindOptions::new();
+                options.projection = Some(FILE_ID_PROJECTION.clone());
+
+                let mut result = collection_files.find(Some(FILE_ID_EXISTS.clone()), Some(options)).map_err(|err| FileCenterError::MongoDBError(err))?;
+
+                let mut array = Vec::new();
+
+                while result.has_next().map_err(|err| FileCenterError::MongoDBError(err))? {
+                    let mut doc = result.next().unwrap().map_err(|err| FileCenterError::MongoDBError(err))?;
+
+                    let id = doc.remove("file_id").ok_or(FileCenterError::DocumentError(bson::ValueAccessError::NotPresent))?;
+                    match id {
+                        Bson::ObjectId(id) => array.push(Bson::ObjectId(id)),
+                        _ => return Err(FileCenterError::DocumentError(bson::ValueAccessError::UnexpectedType))
+                    }
+                }
+
+                array
+            };
+
+            if files.len() > 0 {
+                let fsfs: Vec<ObjectId> = {
+                    let mut options = FindOptions::new();
+                    options.projection = Some(ID_PROJECTION.clone());
+
+                    let mut result = fs_files.find(Some(doc! {
+                        "_id": {
+                            "$nin": Bson::Array(files)
+                        }
+                     }), Some(options)).map_err(|err| FileCenterError::MongoDBError(err))?;
+
+                    let mut array = Vec::new();
+
+                    while result.has_next().map_err(|err| FileCenterError::MongoDBError(err))? {
+                        let mut doc = result.next().unwrap().map_err(|err| FileCenterError::MongoDBError(err))?;
+
+                        let id = doc.remove("_id").ok_or(FileCenterError::DocumentError(bson::ValueAccessError::NotPresent))?;
+                        match id {
+                            Bson::ObjectId(id) => array.push(id),
+                            _ => return Err(FileCenterError::DocumentError(bson::ValueAccessError::UnexpectedType))
+                        }
+                    }
+
+                    array
+                };
+
+                if fsfs.len() > 0 {
+                    let store = Store::with_db(self.mongo_client_db.clone());
+
+                    for id in fsfs {
+                        store.remove_id(id).map_err(|err| FileCenterError::MongoDBError(err))?;
+                    }
+                }
+            }
+        }
+
+        Ok(())
     }
 }
 
