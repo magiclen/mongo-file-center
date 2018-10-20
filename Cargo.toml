@@ -6,7 +6,7 @@ repository = "https://github.com/magiclen/mongo-file-center"
 homepage = "https://magiclen.org/mongo-file-center"
 keywords = ["mongodb", "storage", "file", "rocket"]
 categories = ["filesystem", "database", "web-programming"]
-description= "A library for validating user input."
+description= "A file center based on MongoDB."
 readme = "README.md"
 license = "MIT"
 
