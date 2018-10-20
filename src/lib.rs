@@ -166,6 +166,13 @@ impl FileItem {
         &self.create_time
     }
 
+    pub fn get_expiration_time(&self) -> Option<&DateTime<Utc>> {
+        match &self.expire_at {
+            Some(expire_at) => Some(expire_at),
+            None => None
+        }
+    }
+
     pub fn get_mime_type(&self) -> &str {
         &self.mime_type
     }
