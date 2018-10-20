@@ -40,6 +40,7 @@ const DEFAULT_MIME_TYPE: &str = "application/octet-stream";
 const COLLECTION_FILES_NAME: &str = "file_center";
 const COLLECTION_SETTINGS_NAME: &str = "file_center_settings";
 const MAX_FILE_SIZE_THRESHOLD: i32 = 16770000;
+const DEFAULT_FILE_SIZE_THRESHOLD: i32 = 255000;
 
 const SETTING_FILE_SIZE_THRESHOLD: &str = "file_size_threshold";
 const SETTING_CREATE_TIME: &str = "create_time";
@@ -205,7 +206,7 @@ pub enum FileCenterError {
 impl FileCenter {
     /// Create a new FileCenter instance.
     pub fn new(host: &str, port: u16, database: &str) -> Result<FileCenter, FileCenterError> {
-        Self::new_with_file_size_threshold_inner(host, port, database, MAX_FILE_SIZE_THRESHOLD)
+        Self::new_with_file_size_threshold_inner(host, port, database, DEFAULT_FILE_SIZE_THRESHOLD)
     }
 
     /// Create a new FileCenter instance with a custom initial file size threshold.
