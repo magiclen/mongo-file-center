@@ -169,9 +169,7 @@ fn test_delete_collection() {
 fn test_delete_gridfs() {
     let database = "test_delete_gridfs";
 
-    let mut file_center = FileCenter::new(HOST, PORT, database).unwrap();
-
-    file_center.set_file_size_threshold(50).unwrap();
+    let file_center = FileCenter::new_with_file_size_threshold(HOST, PORT, database, 50).unwrap();
 
     let file = file_center.put_file_by_path(FILE_PATH, None, Some("image/jpeg")).unwrap();
 
@@ -211,27 +209,11 @@ fn test_delete_gridfs() {
     file_center.drop_database().unwrap();
 }
 
-
-#[test]
-fn test_clear_garbage() {
-    let database = "test_input_output_gridfs";
-
-    let file_center = FileCenter::new(HOST, PORT, database).unwrap();
-
-    // TODO: more cases
-
-    file_center.clear_garbage().unwrap();
-
-    file_center.drop_database().unwrap();
-}
-
 #[test]
 fn test_input_output_collection_temporarily() {
     let database = "test_input_output_collection_temporarily";
 
     let file_center = FileCenter::new(HOST, PORT, database).unwrap();
-
-    // TODO: more cases
 
     let file = file_center.put_file_by_path_temporarily(FILE_PATH, None, None).unwrap();
     let file_2 = file_center.put_file_by_buffer_temporarily(fs::read(FILE_PATH).unwrap(), "", None).unwrap();
@@ -266,8 +248,6 @@ fn test_input_output_gridfs_temporarily() {
 
     file_center.set_file_size_threshold(50).unwrap();
 
-    // TODO: more cases
-
     let file = file_center.put_file_by_path_temporarily(FILE_PATH, None, None).unwrap();
     let file_2 = file_center.put_file_by_buffer_temporarily(fs::read(FILE_PATH).unwrap(), "", None).unwrap();
 
@@ -293,6 +273,19 @@ fn test_input_output_gridfs_temporarily() {
             panic!("Not from GridFS!");
         }
     }
+
+    file_center.drop_database().unwrap();
+}
+
+#[test]
+fn test_clear_garbage() {
+    let database = "test_input_output_gridfs";
+
+    let file_center = FileCenter::new(HOST, PORT, database).unwrap();
+
+    // TODO: more cases
+
+    file_center.clear_garbage().unwrap();
 
     file_center.drop_database().unwrap();
 }

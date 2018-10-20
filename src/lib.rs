@@ -205,6 +205,19 @@ pub enum FileCenterError {
 impl FileCenter {
     /// Create a new FileCenter instance.
     pub fn new(host: &str, port: u16, database: &str) -> Result<FileCenter, FileCenterError> {
+        Self::new_with_file_size_threshold_inner(host, port, database, MAX_FILE_SIZE_THRESHOLD)
+    }
+
+    /// Create a new FileCenter instance with a custom initial file size threshold.
+    pub fn new_with_file_size_threshold(host: &str, port: u16, database: &str, initial_file_size_threshold: i32) -> Result<FileCenter, FileCenterError> {
+        if initial_file_size_threshold > MAX_FILE_SIZE_THRESHOLD || initial_file_size_threshold <= 0 {
+            return Err(FileCenterError::FileSizeThresholdError);
+        }
+
+        Self::new_with_file_size_threshold_inner(host, port, database, initial_file_size_threshold)
+    }
+
+    fn new_with_file_size_threshold_inner(host: &str, port: u16, database: &str, initial_file_size_threshold: i32) -> Result<FileCenter, FileCenterError> {
         let mongodb_client = Client::connect(host, port).map_err(|err| FileCenterError::MongoDBError(err))?;
 
         let mongo_client_db = mongodb_client.db(database);
@@ -227,7 +240,7 @@ impl FileCenter {
                 }
                 None => {
                     collection_settings.insert_one(doc! {"_id": SETTING_FILE_SIZE_THRESHOLD, "value": MAX_FILE_SIZE_THRESHOLD}, None).map_err(|err| FileCenterError::MongoDBError(err))?;
-                    MAX_FILE_SIZE_THRESHOLD
+                    initial_file_size_threshold
                 }
             };
 
@@ -275,6 +288,7 @@ impl FileCenter {
         })
     }
 
+    /// Change the file size threshold.
     pub fn set_file_size_threshold(&mut self, file_size_threshold: i32) -> Result<(), FileCenterError> {
         let collection_settings: Collection = self.mongo_client_db.collection(COLLECTION_SETTINGS_NAME);
 
