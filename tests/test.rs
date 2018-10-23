@@ -1,7 +1,7 @@
 extern crate mongo_file_center;
 extern crate bson;
 
-use std::fs;
+use std::fs::{self, File};
 use std::io::Read;
 
 use bson::oid::ObjectId;
@@ -12,6 +12,8 @@ const HOST: &str = "localhost";
 const PORT: u16 = 27017;
 
 const FILE_PATH: &str = "tests/data/image.jpg";
+
+const SIZE_THRESHOLD: i32 = 10 * 1024 * 1024;
 
 #[test]
 fn test_initialize() {
@@ -51,12 +53,14 @@ fn test_crypt() {
 fn test_input_output_collection() {
     let database = "test_input_output_collection";
 
-    let file_center = FileCenter::new(HOST, PORT, database).unwrap();
+    let mut file_center = FileCenter::new(HOST, PORT, database).unwrap();
+
+    file_center.set_file_size_threshold(SIZE_THRESHOLD).unwrap();
 
     let file = file_center.put_file_by_path(FILE_PATH, None, None).unwrap();
 
     {
-        let file_2 = file_center.put_file_by_path(FILE_PATH, None, None).unwrap();
+        let file_2 = file_center.put_file_by_reader(File::open(FILE_PATH).unwrap(), "", None).unwrap();
 
         assert_eq!(file.get_object_id(), file_2.get_object_id());
 
@@ -87,14 +91,12 @@ fn test_input_output_collection() {
 fn test_input_output_gridfs() {
     let database = "test_input_output_gridfs";
 
-    let mut file_center = FileCenter::new(HOST, PORT, database).unwrap();
-
-    file_center.set_file_size_threshold(50).unwrap();
+    let file_center = FileCenter::new(HOST, PORT, database).unwrap();
 
     let file = file_center.put_file_by_path(FILE_PATH, None, Some("image/jpeg")).unwrap();
 
     {
-        let file_2 = file_center.put_file_by_path(FILE_PATH, None, Some("image/jpeg")).unwrap();
+        let file_2 = file_center.put_file_by_reader(File::open(FILE_PATH).unwrap(), "", None).unwrap();
 
         assert_eq!(file.get_object_id(), file_2.get_object_id());
 
@@ -129,7 +131,7 @@ fn test_input_output_gridfs() {
 fn test_delete_collection() {
     let database = "test_delete_collection";
 
-    let file_center = FileCenter::new(HOST, PORT, database).unwrap();
+    let file_center = FileCenter::new_with_file_size_threshold(HOST, PORT, database, SIZE_THRESHOLD).unwrap();
 
     let file = file_center.put_file_by_path(FILE_PATH, None, None).unwrap();
 
@@ -169,7 +171,7 @@ fn test_delete_collection() {
 fn test_delete_gridfs() {
     let database = "test_delete_gridfs";
 
-    let file_center = FileCenter::new_with_file_size_threshold(HOST, PORT, database, 50).unwrap();
+    let file_center = FileCenter::new(HOST, PORT, database).unwrap();
 
     let file = file_center.put_file_by_path(FILE_PATH, None, Some("image/jpeg")).unwrap();
 
@@ -213,12 +215,17 @@ fn test_delete_gridfs() {
 fn test_input_output_collection_temporarily() {
     let database = "test_input_output_collection_temporarily";
 
-    let file_center = FileCenter::new(HOST, PORT, database).unwrap();
+    let mut file_center = FileCenter::new(HOST, PORT, database).unwrap();
+
+    file_center.set_file_size_threshold(SIZE_THRESHOLD).unwrap();
 
     let file = file_center.put_file_by_path_temporarily(FILE_PATH, None, None).unwrap();
     let file_2 = file_center.put_file_by_buffer_temporarily(fs::read(FILE_PATH).unwrap(), "", None).unwrap();
+    let file_3 = file_center.put_file_by_reader_temporarily(File::open(FILE_PATH).unwrap(), "", None).unwrap();
 
     assert_ne!(file.get_object_id(), file_2.get_object_id());
+
+    assert_ne!(file.get_object_id(), file_3.get_object_id());
 
     let r_file = file_center.get_file_item_by_id(file.get_object_id()).unwrap().unwrap();
 
@@ -244,14 +251,15 @@ fn test_input_output_collection_temporarily() {
 fn test_input_output_gridfs_temporarily() {
     let database = "test_input_output_gridfs_temporarily";
 
-    let mut file_center = FileCenter::new(HOST, PORT, database).unwrap();
-
-    file_center.set_file_size_threshold(50).unwrap();
+    let file_center = FileCenter::new(HOST, PORT, database).unwrap();
 
     let file = file_center.put_file_by_path_temporarily(FILE_PATH, None, None).unwrap();
     let file_2 = file_center.put_file_by_buffer_temporarily(fs::read(FILE_PATH).unwrap(), "", None).unwrap();
+    let file_3 = file_center.put_file_by_reader_temporarily(File::open(FILE_PATH).unwrap(), "", None).unwrap();
 
     assert_ne!(file.get_object_id(), file_2.get_object_id());
+
+    assert_ne!(file.get_object_id(), file_3.get_object_id());
 
     let r_file = file_center.get_file_item_by_id(file.get_object_id()).unwrap().unwrap();
 

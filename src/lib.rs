@@ -34,7 +34,7 @@ use std::fs::File;
 use std::mem::transmute;
 use std::fmt::{self, Debug, Formatter};
 
-const FILE_BUFFER_SIZE: usize = 4096;
+const BUFFER_SIZE: usize = 4096;
 const DEFAULT_MIME_TYPE: &str = "application/octet-stream";
 
 const COLLECTION_FILES_NAME: &str = "file_center";
@@ -240,7 +240,7 @@ impl FileCenter {
                     file_size_threshold
                 }
                 None => {
-                    collection_settings.insert_one(doc! {"_id": SETTING_FILE_SIZE_THRESHOLD, "value": MAX_FILE_SIZE_THRESHOLD}, None).map_err(|err| FileCenterError::MongoDBError(err))?;
+                    collection_settings.insert_one(doc! {"_id": SETTING_FILE_SIZE_THRESHOLD, "value": initial_file_size_threshold}, None).map_err(|err| FileCenterError::MongoDBError(err))?;
                     initial_file_size_threshold
                 }
             };
@@ -543,7 +543,7 @@ impl FileCenter {
                     let store = Store::with_db(self.mongo_client_db.clone());
                     let mut store_file: gridfs::file::File = store.create(file_name.to_string()).map_err(|err| FileCenterError::MongoDBError(err))?;
                     let mut file = File::open(file_path).map_err(|err| FileCenterError::IOError(err))?;
-                    let mut buffer = [0u8; FILE_BUFFER_SIZE];
+                    let mut buffer = [0u8; BUFFER_SIZE];
 
                     loop {
                         let c = file.read(&mut buffer).map_err(|err| FileCenterError::IOError(err))?;
@@ -555,7 +555,12 @@ impl FileCenter {
                         store_file.write(&buffer[..c]).map_err(|err| FileCenterError::IOError(err))?;
                     }
 
+                    store_file.flush().map_err(|err| FileCenterError::IOError(err))?;
+
                     let id = store_file.doc.id.clone();
+
+                    drop(store_file);
+
                     file_item_raw.insert("file_id", id);
                     drop(file);
                 } else {
@@ -602,6 +607,10 @@ impl FileCenter {
     pub fn put_file_by_buffer(&self, buffer: Vec<u8>, file_name: &str, mime_type: Option<&str>) -> Result<FileItem, FileCenterError> {
         let (hash_1, hash_2, hash_3, hash_4) = get_hash_by_buffer(&buffer).map_err(|err| FileCenterError::IOError(err))?;
 
+        self.put_file_by_buffer_inner(buffer, file_name, mime_type, (hash_1, hash_2, hash_3, hash_4))
+    }
+
+    fn put_file_by_buffer_inner(&self, buffer: Vec<u8>, file_name: &str, mime_type: Option<&str>, (hash_1, hash_2, hash_3, hash_4): (i64, i64, i64, i64)) -> Result<FileItem, FileCenterError> {
         let collection_files: Collection = self.mongo_client_db.collection(COLLECTION_FILES_NAME);
 
         let mut options = FindOneAndUpdateOptions::new();
@@ -643,7 +652,11 @@ impl FileCenter {
 
                     store_file.write(&buffer).map_err(|err| FileCenterError::IOError(err))?;
 
+                    store_file.flush().map_err(|err| FileCenterError::IOError(err))?;
+
                     let id = store_file.doc.id.clone();
+
+                    drop(store_file);
 
                     file_item_raw.insert("file_id", id);
                 } else {
@@ -672,6 +685,129 @@ impl FileCenter {
 
                 Ok(self.create_file_item(file_item_raw)?)
             }
+        }
+    }
+
+    /// Input a file to the file center via a reader.
+    pub fn put_file_by_reader<R: Read>(&self, mut reader: R, file_name: &str, mime_type: Option<&str>) -> Result<FileItem, FileCenterError> {
+        let mut buffer = [0u8; BUFFER_SIZE];
+
+        let mut sha3_256 = Sha3_256::new();
+
+        let mut temp = Vec::new();
+
+        let mut gridfs = false;
+
+        loop {
+            let c = reader.read(&mut buffer).map_err(|err| FileCenterError::IOError(err))?;
+
+            if c == 0 {
+                break;
+            }
+
+            let buf = &buffer[..c];
+
+            sha3_256.input(buf);
+
+            temp.extend_from_slice(buf);
+
+            if temp.len() as u64 >= self.file_size_threshold as u64 {
+                gridfs = true;
+                break;
+            }
+        }
+
+        if gridfs {
+            let store = Store::with_db(self.mongo_client_db.clone());
+            let mut store_file: gridfs::file::File = store.create(file_name.to_string()).map_err(|err| FileCenterError::MongoDBError(err))?;
+
+            store_file.write(&temp).map_err(|err| FileCenterError::IOError(err))?;
+
+            drop(temp);
+
+            loop {
+                let c = reader.read(&mut buffer).map_err(|err| FileCenterError::IOError(err))?;
+
+                if c == 0 {
+                    break;
+                }
+
+                let buf = &buffer[..c];
+
+                sha3_256.input(buf);
+
+                store_file.write(buf).map_err(|err| FileCenterError::IOError(err))?;
+            }
+
+            store_file.flush().map_err(|err| FileCenterError::IOError(err))?;
+
+            let id = store_file.doc.id.clone();
+
+            drop(store_file);
+
+            let (hash_1, hash_2, hash_3, hash_4) = separate_hash(&sha3_256.result());
+
+            let collection_files: Collection = self.mongo_client_db.collection(COLLECTION_FILES_NAME);
+
+            let mut options = FindOneAndUpdateOptions::new();
+            options.return_document = Some(ReturnDocument::After);
+            options.projection = Some(FILE_ITEM_PROJECTION.clone());
+
+            let result = collection_files.find_one_and_update(doc! {
+                "hash_1": hash_1,
+                "hash_2": hash_2,
+                "hash_3": hash_3,
+                "hash_4": hash_4,
+             }, doc! {
+                "$inc": {
+                    "count": 1
+                }
+            }, Some(options)).map_err(|err| FileCenterError::MongoDBError(err))?;
+
+            match result {
+                Some(result) => {
+                    store.remove_id(id).map_err(|err| FileCenterError::MongoDBError(err))?;
+                    Ok(self.create_file_item(result)?)
+                }
+                None => {
+                    let file_size = buffer.len() as u64;
+
+                    let mut file_item_raw: Document = doc! {
+                        "hash_1": hash_1,
+                        "hash_2": hash_2,
+                        "hash_3": hash_3,
+                        "hash_4": hash_4,
+                        "file_name": file_name,
+                        "file_size": file_size,
+                        "file_id": id,
+                        "count": 1i32
+                    };
+
+                    let mime_type = match mime_type {
+                        Some(mime_type) => {
+                            if !MIME_TYPE_RE.is_match(mime_type) {
+                                return Err(FileCenterError::MimeTypeError);
+                            }
+                            mime_type
+                        }
+                        None => {
+                            DEFAULT_MIME_TYPE
+                        }
+                    };
+
+                    file_item_raw.insert("mime_type", mime_type);
+
+                    file_item_raw.insert("create_time", Utc::now());
+
+                    let result = collection_files.insert_one(file_item_raw.clone(), None).map_err(|err| FileCenterError::MongoDBError(err))?;
+
+                    file_item_raw.insert("_id", result.inserted_id.unwrap());
+
+                    Ok(self.create_file_item(file_item_raw)?)
+                }
+            }
+        } else {
+            self.put_file_by_buffer_inner(temp, file_name, mime_type, separate_hash(&sha3_256.result()))
         }
     }
 
@@ -704,7 +840,7 @@ impl FileCenter {
             let store = Store::with_db(self.mongo_client_db.clone());
             let mut store_file: gridfs::file::File = store.create(file_name.to_string()).map_err(|err| FileCenterError::MongoDBError(err))?;
             let mut file = File::open(file_path).map_err(|err| FileCenterError::IOError(err))?;
-            let mut buffer = [0u8; FILE_BUFFER_SIZE];
+            let mut buffer = [0u8; BUFFER_SIZE];
 
             loop {
                 let c = file.read(&mut buffer).map_err(|err| FileCenterError::IOError(err))?;
@@ -716,7 +852,12 @@ impl FileCenter {
                 store_file.write(&buffer[..c]).map_err(|err| FileCenterError::IOError(err))?;
             }
 
+            store_file.flush().map_err(|err| FileCenterError::IOError(err))?;
+
             let id = store_file.doc.id.clone();
+
+            drop(store_file);
+
             file_item_raw.insert("file_id", id);
             drop(file);
         } else {
@@ -770,10 +911,10 @@ impl FileCenter {
         let file_size = buffer.len() as u64;
 
         let mut file_item_raw: Document = doc! {
-                    "file_name": file_name,
-                    "file_size": file_size,
-                    "count": 1i32
-                };
+            "file_name": file_name,
+            "file_size": file_size,
+            "count": 1i32
+        };
 
         if file_size >= self.file_size_threshold as u64 {
             let store = Store::with_db(self.mongo_client_db.clone());
@@ -782,7 +923,11 @@ impl FileCenter {
 
             store_file.write(&buffer).map_err(|err| FileCenterError::IOError(err))?;
 
+            store_file.flush().map_err(|err| FileCenterError::IOError(err))?;
+
             let id = store_file.doc.id.clone();
+
+            drop(store_file);
 
             file_item_raw.insert("file_id", id);
         } else {
@@ -816,6 +961,97 @@ impl FileCenter {
         file_item_raw.insert("_id", result.inserted_id.unwrap());
 
         Ok(self.create_file_item(file_item_raw)?)
+    }
+
+    /// Temporarily input a file to the file center via a reader.
+    pub fn put_file_by_reader_temporarily<R: Read>(&self, mut reader: R, file_name: &str, mime_type: Option<&str>) -> Result<FileItem, FileCenterError> {
+        let mut buffer = [0u8; BUFFER_SIZE];
+
+        let mut temp = Vec::new();
+
+        let mut gridfs = false;
+
+        loop {
+            let c = reader.read(&mut buffer).map_err(|err| FileCenterError::IOError(err))?;
+
+            if c == 0 {
+                break;
+            }
+
+            temp.extend_from_slice( &buffer[..c]);
+
+            if temp.len() as u64 >= self.file_size_threshold as u64 {
+                gridfs = true;
+                break;
+            }
+        }
+
+        if gridfs {
+            let store = Store::with_db(self.mongo_client_db.clone());
+
+            let mut store_file: gridfs::file::File = store.create(file_name.to_string()).map_err(|err| FileCenterError::MongoDBError(err))?;
+
+            store_file.write(&temp).map_err(|err| FileCenterError::IOError(err))?;
+
+            drop(temp);
+
+            loop {
+                let c = reader.read(&mut buffer).map_err(|err| FileCenterError::IOError(err))?;
+
+                if c == 0 {
+                    break;
+                }
+
+                store_file.write(&buffer[..c]).map_err(|err| FileCenterError::IOError(err))?;
+            }
+
+            store_file.flush().map_err(|err| FileCenterError::IOError(err))?;
+
+            let id = store_file.doc.id.clone();
+
+            drop(store_file);
+
+            let collection_files: Collection = self.mongo_client_db.collection(COLLECTION_FILES_NAME);
+
+            let file_size = buffer.len() as u64;
+
+            let mut file_item_raw: Document = doc! {
+                "file_name": file_name,
+                "file_size": file_size,
+                "file_id": id,
+                "count": 1i32
+            };
+
+            let mime_type = match mime_type {
+                Some(mime_type) => {
+                    if !MIME_TYPE_RE.is_match(mime_type) {
+                        return Err(FileCenterError::MimeTypeError);
+                    }
+                    mime_type
+                }
+                None => {
+                    DEFAULT_MIME_TYPE
+                }
+            };
+
+            file_item_raw.insert("mime_type", mime_type);
+
+            let now = Utc::now();
+
+            let expire: DateTime<Utc> = Utc.timestamp_millis(now.timestamp_millis() + TEMPORARY_LIFE_TIME);
+
+            file_item_raw.insert("create_time", now);
+
+            file_item_raw.insert("expire_at", expire);
+
+            let result = collection_files.insert_one(file_item_raw.clone(), None).map_err(|err| FileCenterError::MongoDBError(err))?;
+
+            file_item_raw.insert("_id", result.inserted_id.unwrap());
+
+            Ok(self.create_file_item(file_item_raw)?)
+        } else {
+            self.put_file_by_buffer_temporarily(temp, file_name, mime_type)
+        }
     }
 
     /// Remove all unused files in fs.files and in COLLECTION_FILES.
@@ -985,7 +1221,7 @@ fn get_hash_by_path<P: AsRef<Path>>(file_path: P) -> Result<(i64, i64, i64, i64)
 
     let mut sha3_256 = Sha3_256::new();
 
-    let mut buffer = [0u8; FILE_BUFFER_SIZE];
+    let mut buffer = [0u8; BUFFER_SIZE];
 
     loop {
         let c = file.read(&mut buffer)?;
@@ -999,17 +1235,7 @@ fn get_hash_by_path<P: AsRef<Path>>(file_path: P) -> Result<(i64, i64, i64, i64)
 
     let result = sha3_256.result();
 
-    let mut hash_1 = [0u8; 8];
-    let mut hash_2 = [0u8; 8];
-    let mut hash_3 = [0u8; 8];
-    let mut hash_4 = [0u8; 8];
-
-    hash_1.copy_from_slice(&result[0..8]);
-    hash_2.copy_from_slice(&result[8..16]);
-    hash_3.copy_from_slice(&result[16..24]);
-    hash_4.copy_from_slice(&result[24..32]);
-
-    Ok((unsafe { transmute(hash_1) }, unsafe { transmute(hash_2) }, unsafe { transmute(hash_3) }, unsafe { transmute(hash_4) }))
+    Ok(separate_hash(&result))
 }
 
 fn get_hash_by_buffer<P: AsRef<[u8]>>(buffer: P) -> Result<(i64, i64, i64, i64), io::Error> {
@@ -1021,15 +1247,19 @@ fn get_hash_by_buffer<P: AsRef<[u8]>>(buffer: P) -> Result<(i64, i64, i64, i64),
 
     let result = sha3_256.result();
 
+    Ok(separate_hash(&result))
+}
+
+fn separate_hash(hash: &[u8]) -> (i64, i64, i64, i64) {
     let mut hash_1 = [0u8; 8];
     let mut hash_2 = [0u8; 8];
     let mut hash_3 = [0u8; 8];
     let mut hash_4 = [0u8; 8];
 
-    hash_1.copy_from_slice(&result[0..8]);
-    hash_2.copy_from_slice(&result[8..16]);
-    hash_3.copy_from_slice(&result[16..24]);
-    hash_4.copy_from_slice(&result[24..32]);
+    hash_1.copy_from_slice(&hash[0..8]);
+    hash_2.copy_from_slice(&hash[8..16]);
+    hash_3.copy_from_slice(&hash[16..24]);
+    hash_4.copy_from_slice(&hash[24..32]);
 
-    Ok((unsafe { transmute(hash_1) }, unsafe { transmute(hash_2) }, unsafe { transmute(hash_3) }, unsafe { transmute(hash_4) }))
+    (unsafe { transmute(hash_1) }, unsafe { transmute(hash_2) }, unsafe { transmute(hash_3) }, unsafe { transmute(hash_4) })
 }
