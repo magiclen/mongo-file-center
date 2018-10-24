@@ -33,6 +33,8 @@ use std::io::{self, Read, Write};
 use std::fs::File;
 use std::mem::transmute;
 use std::fmt::{self, Debug, Formatter};
+use std::thread;
+use std::time::Duration;
 
 const BUFFER_SIZE: usize = 4096;
 const DEFAULT_MIME_TYPE: &str = "application/octet-stream";
@@ -978,7 +980,7 @@ impl FileCenter {
                 break;
             }
 
-            temp.extend_from_slice( &buffer[..c]);
+            temp.extend_from_slice(&buffer[..c]);
 
             if temp.len() as u64 >= self.file_size_threshold as u64 {
                 gridfs = true;
@@ -1018,7 +1020,7 @@ impl FileCenter {
             let mut file_item_raw: Document = doc! {
                 "file_name": file_name,
                 "file_size": file_size,
-                "file_id": id,
+                "file_id": id.clone(),
                 "count": 1i32
             };
 
@@ -1045,6 +1047,17 @@ impl FileCenter {
             file_item_raw.insert("expire_at", expire);
 
             let result = collection_files.insert_one(file_item_raw.clone(), None).map_err(|err| FileCenterError::MongoDBError(err))?;
+
+            {
+                let db = self.mongo_client_db.clone();
+                thread::spawn(move || {
+                    thread::sleep(Duration::from_millis(TEMPORARY_LIFE_TIME as u64));
+
+                    let store = Store::with_db(db);
+
+                    if let Err(_) = store.remove_id(id) {};
+                });
+            }
 
             file_item_raw.insert("_id", result.inserted_id.unwrap());
 
