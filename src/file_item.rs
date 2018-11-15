@@ -28,10 +28,7 @@ impl FileItem {
     }
 
     pub fn get_expiration_time(&self) -> Option<&DateTime<Utc>> {
-        match &self.expire_at {
-            Some(expire_at) => Some(expire_at),
-            None => None
-        }
+        self.expire_at.as_ref()
     }
 
     pub fn get_mime_type(&self) -> &Mime {
