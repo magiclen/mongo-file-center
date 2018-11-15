@@ -15,7 +15,7 @@ Temporary files are suggested to store in a collection, otherwise you have to **
 
 ## Example
 
-```rust,ignore
+```rust
 extern crate mongo_file_center;
 extern crate mime;
 
