@@ -4,6 +4,19 @@ rust:
 - stable
 - beta
 - nightly
-os:
-- linux
-- osx
+
+cache: cargo
+
+env:
+  global:
+  - CACHE_NAME=global_cache
+  matrix:
+  - MONGODB_RELEASE=mongodb-linux-x86_64-ubuntu1404-3.4.15
+  - MONGODB_RELEASE=mongodb-linux-x86_64-ubuntu1404-3.6.5
+  - MONGODB_RELEASE=mongodb-linux-x86_64-ubuntu1404-4.0.0
+
+before_install:
+- ./script/start_mongo_release $TRAVIS_OS_NAME $MONGODB_RELEASE
+
+script:
+- cargo test --verbose
