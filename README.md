@@ -2,6 +2,7 @@ File Center on MongoDB
 ====================
 
 [![Build Status](https://travis-ci.org/magiclen/mongo-file-center.svg?branch=master)](https://travis-ci.org/magiclen/mongo-file-center)
+[![Build status](https://ci.appveyor.com/api/projects/status/g3111ss5tmou8hjw/branch/master?svg=true)](https://ci.appveyor.com/project/magiclen/mongo-file-center/branch/master)
 
 This crate aims to build a easy-to-use and no-redundant file storage based on MongoDB.
 
