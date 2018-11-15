@@ -6,7 +6,7 @@ repository = "https://github.com/magiclen/mongo-file-center"
 homepage = "https://magiclen.org/mongo-file-center"
 keywords = ["mongodb", "storage", "file"]
 categories = ["filesystem", "database"]
-description= "A file center based on MongoDB."
+description= "To store perennial files and temporary files in MongoDB."
 readme = "README.md"
 license = "MIT"
 
@@ -15,12 +15,12 @@ travis-ci = { repository = "magiclen/mongo-file-center", branch = "master" }
 appveyor = { repository = "magiclen/mongo-file-center", branch = "master", service = "github" }
 
 [dependencies]
-mongodb = { git = "https://github.com/magiclen/mongo-rust-driver-prototype", branch = "master" }
-#mongodb = "0.3.10"
+mongodb = "0.3.11"
 bson = "0.13"
-short-crypt = "1.0.4"
+short-crypt = "1.0.5"
 lazy_static = "1.1.0"
 chrono = "0.4.6"
 sha3 = "0.8.0"
-mime_guess = "1.8.6"
-regex = "1.0.5"
+mime = "0.3.12"
+mime_guess = "2.0.0-alpha.6"
+rand = "0.6.0"

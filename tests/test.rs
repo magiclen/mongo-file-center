@@ -1,5 +1,6 @@
 extern crate mongo_file_center;
 extern crate bson;
+extern crate mime;
 
 use std::fs::{self, File};
 use std::io::Read;
@@ -11,12 +12,16 @@ use mongo_file_center::{FileCenter, FileData};
 const HOST: &str = "localhost";
 const PORT: u16 = 27017;
 
+#[cfg(windows)]
+const FILE_PATH: &str = r"tests\data\image.jpg";
+
+#[cfg(not(windows))]
 const FILE_PATH: &str = "tests/data/image.jpg";
 
 const SIZE_THRESHOLD: i32 = 10 * 1024 * 1024;
 
 #[test]
-fn test_initialize() {
+fn initialize() {
     let database = "test_initialize";
     {
         FileCenter::new(HOST, PORT, database).unwrap();
@@ -27,7 +32,7 @@ fn test_initialize() {
 }
 
 #[test]
-fn test_crypt() {
+fn crypt() {
     let database = "test_crypt";
 
     let file_center = FileCenter::new(HOST, PORT, database).unwrap();
@@ -50,14 +55,14 @@ fn test_crypt() {
 }
 
 #[test]
-fn test_input_output_collection() {
+fn input_output_collection() {
     let database = "test_input_output_collection";
 
     let mut file_center = FileCenter::new(HOST, PORT, database).unwrap();
 
     file_center.set_file_size_threshold(SIZE_THRESHOLD).unwrap();
 
-    let file = file_center.put_file_by_path(FILE_PATH, None, None).unwrap();
+    let file = file_center.put_file_by_path(FILE_PATH, None::<String>, None).unwrap();
 
     {
         let file_2 = file_center.put_file_by_reader(File::open(FILE_PATH).unwrap(), "", None).unwrap();
@@ -88,12 +93,12 @@ fn test_input_output_collection() {
 }
 
 #[test]
-fn test_input_output_gridfs() {
+fn input_output_gridfs() {
     let database = "test_input_output_gridfs";
 
     let file_center = FileCenter::new(HOST, PORT, database).unwrap();
 
-    let file = file_center.put_file_by_path(FILE_PATH, None, Some("image/jpeg")).unwrap();
+    let file = file_center.put_file_by_path(FILE_PATH, None::<String>, Some(mime::IMAGE_JPEG)).unwrap();
 
     {
         let file_2 = file_center.put_file_by_reader(File::open(FILE_PATH).unwrap(), "", None).unwrap();
@@ -128,21 +133,21 @@ fn test_input_output_gridfs() {
 }
 
 #[test]
-fn test_delete_collection() {
+fn delete_collection() {
     let database = "test_delete_collection";
 
     let file_center = FileCenter::new_with_file_size_threshold(HOST, PORT, database, SIZE_THRESHOLD).unwrap();
 
-    let file = file_center.put_file_by_path(FILE_PATH, None, None).unwrap();
+    let file = file_center.put_file_by_path(FILE_PATH, None::<String>, None).unwrap();
 
     let file_id = file.get_object_id();
 
     assert_eq!(Some(file.get_file_size()), file_center.delete_file_item_by_id(file_id).unwrap());
     assert_eq!(None, file_center.delete_file_item_by_id(file_id).unwrap());
 
-    file_center.put_file_by_path(FILE_PATH, None, None).unwrap();
+    file_center.put_file_by_path(FILE_PATH, None::<String>, None).unwrap();
 
-    let file = file_center.put_file_by_path(FILE_PATH, None, None).unwrap();
+    let file = file_center.put_file_by_path(FILE_PATH, None::<String>, None).unwrap();
 
     let file_id = file.get_object_id().clone();
     let file_size = file.get_file_size();
@@ -168,21 +173,21 @@ fn test_delete_collection() {
 }
 
 #[test]
-fn test_delete_gridfs() {
+fn delete_gridfs() {
     let database = "test_delete_gridfs";
 
     let file_center = FileCenter::new(HOST, PORT, database).unwrap();
 
-    let file = file_center.put_file_by_path(FILE_PATH, None, Some("image/jpeg")).unwrap();
+    let file = file_center.put_file_by_path(FILE_PATH, None::<String>, Some(mime::IMAGE_JPEG)).unwrap();
 
     let file_id = file.get_object_id();
 
     assert_eq!(Some(file.get_file_size()), file_center.delete_file_item_by_id(file_id).unwrap());
     assert_eq!(None, file_center.delete_file_item_by_id(file_id).unwrap());
 
-    file_center.put_file_by_path(FILE_PATH, None, None).unwrap();
+    file_center.put_file_by_path(FILE_PATH, None::<String>, None).unwrap();
 
-    let file = file_center.put_file_by_path(FILE_PATH, None, Some("image/jpeg")).unwrap();
+    let file = file_center.put_file_by_path(FILE_PATH, None::<String>, Some(mime::IMAGE_JPEG)).unwrap();
 
     let file_id = file.get_object_id().clone();
     let file_size = file.get_file_size();
@@ -212,14 +217,14 @@ fn test_delete_gridfs() {
 }
 
 #[test]
-fn test_input_output_collection_temporarily() {
+fn input_output_collection_temporarily() {
     let database = "test_input_output_collection_temporarily";
 
     let mut file_center = FileCenter::new(HOST, PORT, database).unwrap();
 
     file_center.set_file_size_threshold(SIZE_THRESHOLD).unwrap();
 
-    let file = file_center.put_file_by_path_temporarily(FILE_PATH, None, None).unwrap();
+    let file = file_center.put_file_by_path_temporarily(FILE_PATH, None::<String>, None).unwrap();
     let file_2 = file_center.put_file_by_buffer_temporarily(fs::read(FILE_PATH).unwrap(), "", None).unwrap();
     let file_3 = file_center.put_file_by_reader_temporarily(File::open(FILE_PATH).unwrap(), "", None).unwrap();
 
@@ -248,12 +253,12 @@ fn test_input_output_collection_temporarily() {
 }
 
 #[test]
-fn test_input_output_gridfs_temporarily() {
+fn input_output_gridfs_temporarily() {
     let database = "test_input_output_gridfs_temporarily";
 
     let file_center = FileCenter::new(HOST, PORT, database).unwrap();
 
-    let file = file_center.put_file_by_path_temporarily(FILE_PATH, None, None).unwrap();
+    let file = file_center.put_file_by_path_temporarily(FILE_PATH, None::<String>, None).unwrap();
     let file_2 = file_center.put_file_by_buffer_temporarily(fs::read(FILE_PATH).unwrap(), "", None).unwrap();
     let file_3 = file_center.put_file_by_reader_temporarily(File::open(FILE_PATH).unwrap(), "", None).unwrap();
 
@@ -286,7 +291,7 @@ fn test_input_output_gridfs_temporarily() {
 }
 
 #[test]
-fn test_clear_garbage() {
+fn clear_garbage() {
     let database = "test_input_output_gridfs";
 
     let file_center = FileCenter::new(HOST, PORT, database).unwrap();

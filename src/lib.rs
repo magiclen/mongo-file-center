@@ -1,15 +1,70 @@
+/*!
+# File Center on MongoDB
+
+This crate aims to build a easy-to-use and no-redundant file storage based on MongoDB.
+
+For perennial files, each of them is unique in the database, and can be retrieved many times without limitation.
+
+For temporary files, they are allowed to be duplicated, but each instance can be retrieved only one time in a minute after it is created.
+
+The file data can be store in a collection or GridFS. It depends on the size of data. If the size is bigger than the threshold, it stores in GridFS, or it stores in a collection. The max threshold is **16_770_000 bytes**. The default threshold is **255KB**.
+
+Temporary files are suggested to store in a collection, otherwise you have to **clear the garbage** in GridFS.
+
+## Example
+
+```rust,ignore
+extern crate mongo_file_center;
+extern crate mime;
+
+use mongo_file_center::{FileCenter, FileData};
+
+const HOST: &str = "localhost";
+const PORT: u16 = 27017;
+
+let database = "test_my_file_storage";
+
+let file_center = FileCenter::new(HOST, PORT, database).unwrap();
+
+let file = file_center.put_file_by_path("/path/to/file", Some("file_name"), Some(mime::IMAGE_JPEG)).unwrap();
+
+let file_id = file.get_object_id();
+
+let id_token = file.encrypt_id(&file_id); // this token is safe in public
+
+let file_id = file_center.decrypt_id_token(&id_token).unwrap();
+
+let r_file = file_center.get_file_item_by_id(file_id).unwrap().unwrap();
+
+match r_file.into_file_data() {
+    FileData::GridFS(file) => {
+        // do something
+    }
+    FileData::FileData(data) => {
+        // do something
+    }
+}
+```
+*/
 #[macro_use(bson, doc)]
 extern crate bson;
 
 #[macro_use]
 extern crate lazy_static;
 
-extern crate mongodb;
+pub extern crate mongodb;
+pub extern crate mime;
 extern crate chrono;
 extern crate short_crypt;
 extern crate sha3;
 extern crate mime_guess;
-extern crate regex;
+extern crate rand;
+
+mod file_data;
+mod file_item;
+
+pub use file_data::FileData;
+pub use file_item::FileItem;
 
 use mongodb::{Client, ThreadedClient};
 use mongodb::db::{Database, ThreadedDatabase};
@@ -20,7 +75,9 @@ use bson::oid::ObjectId;
 use bson::{Bson, Document};
 use bson::spec::BinarySubtype;
 
-use regex::Regex;
+use mime::Mime;
+
+use rand::{thread_rng, Rng};
 
 use chrono::prelude::*;
 
@@ -32,12 +89,10 @@ use std::path::Path;
 use std::io::{self, Read, Write};
 use std::fs::File;
 use std::mem::transmute;
-use std::fmt::{self, Debug, Formatter};
-use std::thread;
-use std::time::Duration;
+use std::str::FromStr;
 
 const BUFFER_SIZE: usize = 4096;
-const DEFAULT_MIME_TYPE: &str = "application/octet-stream";
+const DEFAULT_MIME_TYPE: Mime = mime::APPLICATION_OCTET_STREAM;
 
 const COLLECTION_FILES_NAME: &str = "file_center";
 const COLLECTION_SETTINGS_NAME: &str = "file_center_settings";
@@ -46,6 +101,9 @@ const DEFAULT_FILE_SIZE_THRESHOLD: i32 = 255000;
 
 const SETTING_FILE_SIZE_THRESHOLD: &str = "file_size_threshold";
 const SETTING_CREATE_TIME: &str = "create_time";
+const SETTING_VERSION: &str = "version";
+
+const VERSION: i32 = 1; // Used for updating the database.
 
 const TEMPORARY_LIFE_TIME: i64 = 60000;
 
@@ -94,105 +152,18 @@ lazy_static! {
             }
         }
     };
-    static ref MIME_TYPE_RE: Regex = {
-        Regex::new(r"^(([a-zA-Z0-9\-.+]+)/([a-zA-Z0-9\-.+]+))$").unwrap()
-    };
 }
 
+/// To store perennial files and temporary files in MongoDB.
 pub struct FileCenter {
     mongo_client_db: Database,
     file_size_threshold: i32,
     _create_time: DateTime<Utc>,
+    _version: i32,
     short_crypt: ShortCrypt,
 }
 
-pub enum FileData {
-    Collection(Vec<u8>),
-    GridFS(gridfs::file::File),
-}
-
-impl FileData {
-    pub fn into_vec(self) -> Result<Vec<u8>, io::Error> {
-        match self {
-            FileData::Collection(v) => Ok(v),
-            FileData::GridFS(mut f) => {
-                let mut buffer = Vec::new();
-
-                f.read_to_end(&mut buffer)?;
-
-                Ok(buffer)
-            }
-        }
-    }
-
-    pub fn into_vec_unchecked(self) -> Vec<u8> {
-        match self {
-            FileData::Collection(v) => v,
-            FileData::GridFS(mut f) => {
-                let mut buffer = Vec::new();
-
-                f.read_to_end(&mut buffer).unwrap();
-
-                buffer
-            }
-        }
-    }
-}
-
-impl Debug for FileData {
-    fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
-        match self {
-            FileData::Collection(_) => f.write_str("FileData::Collection")?,
-            FileData::GridFS(_) => f.write_str("FileData::GridFS")?,
-        }
-        Ok(())
-    }
-}
-
-#[derive(Debug)]
-pub struct FileItem {
-    id: ObjectId,
-    create_time: DateTime<Utc>,
-    expire_at: Option<DateTime<Utc>>,
-    mime_type: String,
-    file_size: u64,
-    file_name: String,
-    file_data: FileData,
-}
-
-impl FileItem {
-    pub fn get_object_id(&self) -> &ObjectId {
-        &self.id
-    }
-
-    pub fn get_create_time(&self) -> &DateTime<Utc> {
-        &self.create_time
-    }
-
-    pub fn get_expiration_time(&self) -> Option<&DateTime<Utc>> {
-        match &self.expire_at {
-            Some(expire_at) => Some(expire_at),
-            None => None
-        }
-    }
-
-    pub fn get_mime_type(&self) -> &str {
-        &self.mime_type
-    }
-
-    pub fn get_file_size(&self) -> u64 {
-        self.file_size
-    }
-
-    pub fn get_file_name(&self) -> &str {
-        &self.file_name
-    }
-
-    pub fn into_file_data(self) -> FileData {
-        self.file_data
-    }
-}
-
+/// A string of an encrypted file ID which can be used as a URL component.
 pub type IDToken = String;
 
 #[derive(Debug)]
@@ -201,6 +172,11 @@ pub enum FileCenterError {
     DocumentError(bson::ValueAccessError),
     IDTokenError(&'static str),
     FileSizeThresholdError,
+    VersionError,
+    DatabaseTooNewError {
+        supported_latest: i32,
+        current: i32,
+    },
     IOError(io::Error),
     MimeTypeError,
 }
@@ -227,6 +203,7 @@ impl FileCenter {
 
         let file_size_threshold;
         let create_time;
+        let version;
 
         {
             let collection_settings: Collection = mongo_client_db.collection(COLLECTION_SETTINGS_NAME);
@@ -259,6 +236,30 @@ impl FileCenter {
                     now
                 }
             };
+
+            version = match collection_settings.find_one(Some(doc! {"_id": SETTING_VERSION}), None).map_err(|err| FileCenterError::MongoDBError(err))? {
+                Some(version) => {
+                    let version = version.get_i32("value").map_err(|err| FileCenterError::DocumentError(err))?;
+
+                    if version <= 0 {
+                        return Err(FileCenterError::VersionError);
+                    }
+
+                    if version > VERSION {
+                        return Err(FileCenterError::DatabaseTooNewError {
+                            supported_latest: VERSION,
+                            current: version,
+                        });
+                    }
+
+                    version
+                }
+                None => {
+                    collection_settings.insert_one(doc! {"_id": SETTING_VERSION, "value": VERSION}, None).map_err(|err| FileCenterError::MongoDBError(err))?;
+
+                    VERSION
+                }
+            };
         }
 
         {
@@ -277,7 +278,7 @@ impl FileCenter {
             {
                 let mut options = IndexOptions::new();
                 options.unique = Some(true);
-                collection_files.create_index(doc! {"hash_1": 1, "hash_2": 1, "hash_3": 1, "hash_4": 1}, None).unwrap();
+                collection_files.create_index(doc! {"hash_1": 1, "hash_2": 1, "hash_3": 1, "hash_4": 1}, Some(options)).unwrap();
             }
         }
 
@@ -287,6 +288,7 @@ impl FileCenter {
             mongo_client_db,
             file_size_threshold,
             _create_time: create_time,
+            _version: version,
             short_crypt,
         })
     }
@@ -312,7 +314,7 @@ impl FileCenter {
     }
 
     /// Decrypt a ID token to an Object ID.
-    pub fn decrypt_id_token(&self, id_token: &str) -> Result<ObjectId, FileCenterError> {
+    pub fn decrypt_id_token<S: AsRef<str>>(&self, id_token: S) -> Result<ObjectId, FileCenterError> {
         let id_raw = self.short_crypt.decrypt_url_component(id_token).map_err(|err| FileCenterError::IDTokenError(err))?;
 
         let id_raw: [u8; 12] = {
@@ -381,16 +383,14 @@ impl FileCenter {
             None => None
         };
 
-        let mime_type = match document.remove("mime_type")
-            .ok_or(FileCenterError::DocumentError(bson::ValueAccessError::NotPresent))? {
-            Bson::String(b) => b,
+        let mime_type = match document.remove("mime_type").ok_or(FileCenterError::DocumentError(bson::ValueAccessError::NotPresent))? {
+            Bson::String(b) => Mime::from_str(&b).map_err(|_| FileCenterError::DocumentError(bson::ValueAccessError::UnexpectedType))?,
             _ => return Err(FileCenterError::DocumentError(bson::ValueAccessError::UnexpectedType))
         };
 
         let file_size = document.get_i64("file_size").map_err(|err| FileCenterError::DocumentError(err))? as u64;
 
-        let file_name = match document.remove("file_name")
-            .ok_or(FileCenterError::DocumentError(bson::ValueAccessError::NotPresent))? {
+        let file_name = match document.remove("file_name").ok_or(FileCenterError::DocumentError(bson::ValueAccessError::NotPresent))? {
             Bson::String(b) => b,
             _ => return Err(FileCenterError::DocumentError(bson::ValueAccessError::UnexpectedType))
         };
@@ -424,7 +424,7 @@ impl FileCenter {
         })
     }
 
-    /// Get the file item searched via an Object ID.
+    /// Get the file item via an Object ID.
     pub fn get_file_item_by_id(&self, id: &ObjectId) -> Result<Option<FileItem>, FileCenterError> {
         let collection_files: Collection = self.mongo_client_db.collection(COLLECTION_FILES_NAME);
 
@@ -447,7 +447,7 @@ impl FileCenter {
         }
     }
 
-    /// Remove a file item searched via an Object ID.
+    /// Remove a file item via an Object ID.
     pub fn delete_file_item_by_id(&self, id: &ObjectId) -> Result<Option<u64>, FileCenterError> {
         let collection_files: Collection = self.mongo_client_db.collection(COLLECTION_FILES_NAME);
 
@@ -491,7 +491,7 @@ impl FileCenter {
     }
 
     /// Input a file to the file center via a file path.
-    pub fn put_file_by_path<P: AsRef<Path>>(&self, file_path: P, file_name: Option<&str>, mime_type: Option<&str>) -> Result<FileItem, FileCenterError> {
+    pub fn put_file_by_path<P: AsRef<Path>, S: AsRef<str>>(&self, file_path: P, file_name: Option<S>, mime_type: Option<Mime>) -> Result<FileItem, FileCenterError> {
         let file_path = file_path.as_ref();
 
         let (hash_1, hash_2, hash_3, hash_4) = get_hash_by_path(file_path).map_err(|err| FileCenterError::IOError(err))?;
@@ -518,8 +518,8 @@ impl FileCenter {
                 Ok(self.create_file_item(result)?)
             }
             None => {
-                let file_name = match file_name {
-                    Some(file_name) => file_name,
+                let file_name = match file_name.as_ref() {
+                    Some(file_name) => file_name.as_ref(),
                     None => {
                         file_path.file_name().unwrap().to_str().unwrap()
                     }
@@ -573,26 +573,16 @@ impl FileCenter {
                 }
 
                 let mime_type = match mime_type {
-                    Some(mime_type) => {
-                        if !MIME_TYPE_RE.is_match(mime_type) {
-                            return Err(FileCenterError::MimeTypeError);
-                        }
-                        mime_type
-                    }
+                    Some(mime_type) => mime_type,
                     None => {
                         match file_path.extension() {
-                            Some(extension) => {
-                                match mime_guess::get_mime_type_str(&extension.to_str().unwrap().to_lowercase()) {
-                                    Some(mime) => mime,
-                                    None => DEFAULT_MIME_TYPE
-                                }
-                            }
+                            Some(extension) => mime_guess::get_mime_type(extension.to_str().unwrap()),
                             None => DEFAULT_MIME_TYPE
                         }
                     }
                 };
 
-                file_item_raw.insert("mime_type", mime_type);
+                file_item_raw.insert("mime_type", mime_type.as_ref());
 
                 file_item_raw.insert("create_time", Utc::now());
 
@@ -606,13 +596,13 @@ impl FileCenter {
     }
 
     /// Input a file to the file center via a buffer.
-    pub fn put_file_by_buffer(&self, buffer: Vec<u8>, file_name: &str, mime_type: Option<&str>) -> Result<FileItem, FileCenterError> {
+    pub fn put_file_by_buffer(&self, buffer: Vec<u8>, file_name: &str, mime_type: Option<Mime>) -> Result<FileItem, FileCenterError> {
         let (hash_1, hash_2, hash_3, hash_4) = get_hash_by_buffer(&buffer).map_err(|err| FileCenterError::IOError(err))?;
 
         self.put_file_by_buffer_inner(buffer, file_name, mime_type, (hash_1, hash_2, hash_3, hash_4))
     }
 
-    fn put_file_by_buffer_inner(&self, buffer: Vec<u8>, file_name: &str, mime_type: Option<&str>, (hash_1, hash_2, hash_3, hash_4): (i64, i64, i64, i64)) -> Result<FileItem, FileCenterError> {
+    fn put_file_by_buffer_inner(&self, buffer: Vec<u8>, file_name: &str, mime_type: Option<Mime>, (hash_1, hash_2, hash_3, hash_4): (i64, i64, i64, i64)) -> Result<FileItem, FileCenterError> {
         let collection_files: Collection = self.mongo_client_db.collection(COLLECTION_FILES_NAME);
 
         let mut options = FindOneAndUpdateOptions::new();
@@ -666,18 +656,13 @@ impl FileCenter {
                 }
 
                 let mime_type = match mime_type {
-                    Some(mime_type) => {
-                        if !MIME_TYPE_RE.is_match(mime_type) {
-                            return Err(FileCenterError::MimeTypeError);
-                        }
-                        mime_type
-                    }
+                    Some(mime_type) => mime_type,
                     None => {
                         DEFAULT_MIME_TYPE
                     }
                 };
 
-                file_item_raw.insert("mime_type", mime_type);
+                file_item_raw.insert("mime_type", mime_type.as_ref());
 
                 file_item_raw.insert("create_time", Utc::now());
 
@@ -691,7 +676,7 @@ impl FileCenter {
     }
 
     /// Input a file to the file center via a reader.
-    pub fn put_file_by_reader<R: Read>(&self, mut reader: R, file_name: &str, mime_type: Option<&str>) -> Result<FileItem, FileCenterError> {
+    pub fn put_file_by_reader<R: Read>(&self, mut reader: R, file_name: &str, mime_type: Option<Mime>) -> Result<FileItem, FileCenterError> {
         let mut buffer = [0u8; BUFFER_SIZE];
 
         let mut sha3_256 = Sha3_256::new();
@@ -786,18 +771,13 @@ impl FileCenter {
                     };
 
                     let mime_type = match mime_type {
-                        Some(mime_type) => {
-                            if !MIME_TYPE_RE.is_match(mime_type) {
-                                return Err(FileCenterError::MimeTypeError);
-                            }
-                            mime_type
-                        }
+                        Some(mime_type) => mime_type,
                         None => {
                             DEFAULT_MIME_TYPE
                         }
                     };
 
-                    file_item_raw.insert("mime_type", mime_type);
+                    file_item_raw.insert("mime_type", mime_type.as_ref());
 
                     file_item_raw.insert("create_time", Utc::now());
 
@@ -814,13 +794,15 @@ impl FileCenter {
     }
 
     /// Temporarily input a file to the file center via a file path.
-    pub fn put_file_by_path_temporarily<P: AsRef<Path>>(&self, file_path: P, file_name: Option<&str>, mime_type: Option<&str>) -> Result<FileItem, FileCenterError> {
-        let file_path = file_path.as_ref();
-
+    pub fn put_file_by_path_temporarily<P: AsRef<Path>, S: AsRef<str>>(&self, file_path: P, file_name: Option<S>, mime_type: Option<Mime>) -> Result<FileItem, FileCenterError> {
         let collection_files: Collection = self.mongo_client_db.collection(COLLECTION_FILES_NAME);
 
-        let file_name = match file_name {
-            Some(file_name) => file_name,
+        let (hash_1, hash_2, hash_3, hash_4) = get_hash_by_random();
+
+        let file_path = file_path.as_ref();
+
+        let file_name = match file_name.as_ref() {
+            Some(file_name) => file_name.as_ref(),
             None => {
                 file_path.file_name().unwrap().to_str().unwrap()
             }
@@ -833,6 +815,10 @@ impl FileCenter {
         let file_size = metadata.len();
 
         let mut file_item_raw: Document = doc! {
+            "hash_1": hash_1,
+            "hash_2": hash_2,
+            "hash_3": hash_3,
+            "hash_4": hash_4,
             "file_name": file_name,
             "file_size": file_size,
             "count": 1i32
@@ -860,7 +846,7 @@ impl FileCenter {
 
             drop(store_file);
 
-            file_item_raw.insert("file_id", id);
+            file_item_raw.insert("file_id", id.clone());
             drop(file);
         } else {
             let mut file_data = Vec::new();
@@ -870,26 +856,16 @@ impl FileCenter {
         }
 
         let mime_type = match mime_type {
-            Some(mime_type) => {
-                if !MIME_TYPE_RE.is_match(mime_type) {
-                    return Err(FileCenterError::MimeTypeError);
-                }
-                mime_type
-            }
+            Some(mime_type) => mime_type,
             None => {
                 match file_path.extension() {
-                    Some(extension) => {
-                        match mime_guess::get_mime_type_str(&extension.to_str().unwrap().to_lowercase()) {
-                            Some(mime) => mime,
-                            None => DEFAULT_MIME_TYPE
-                        }
-                    }
+                    Some(extension) => mime_guess::get_mime_type(extension.to_str().unwrap()),
                     None => DEFAULT_MIME_TYPE
                 }
             }
         };
 
-        file_item_raw.insert("mime_type", mime_type);
+        file_item_raw.insert("mime_type", mime_type.as_ref());
 
         let now = Utc::now();
 
@@ -907,12 +883,20 @@ impl FileCenter {
     }
 
     /// Temporarily input a file to the file center via a buffer.
-    pub fn put_file_by_buffer_temporarily(&self, buffer: Vec<u8>, file_name: &str, mime_type: Option<&str>) -> Result<FileItem, FileCenterError> {
+    pub fn put_file_by_buffer_temporarily<S: AsRef<str>>(&self, buffer: Vec<u8>, file_name: S, mime_type: Option<Mime>) -> Result<FileItem, FileCenterError> {
         let collection_files: Collection = self.mongo_client_db.collection(COLLECTION_FILES_NAME);
+
+        let (hash_1, hash_2, hash_3, hash_4) = get_hash_by_random();
 
         let file_size = buffer.len() as u64;
 
+        let file_name = file_name.as_ref();
+
         let mut file_item_raw: Document = doc! {
+            "hash_1": hash_1,
+            "hash_2": hash_2,
+            "hash_3": hash_3,
+            "hash_4": hash_4,
             "file_name": file_name,
             "file_size": file_size,
             "count": 1i32
@@ -931,24 +915,19 @@ impl FileCenter {
 
             drop(store_file);
 
-            file_item_raw.insert("file_id", id);
+            file_item_raw.insert("file_id", id.clone());
         } else {
             file_item_raw.insert("file_data", Bson::Binary(BinarySubtype::Generic, buffer));
         }
 
         let mime_type = match mime_type {
-            Some(mime_type) => {
-                if !MIME_TYPE_RE.is_match(mime_type) {
-                    return Err(FileCenterError::MimeTypeError);
-                }
-                mime_type
-            }
+            Some(mime_type) => mime_type,
             None => {
                 DEFAULT_MIME_TYPE
             }
         };
 
-        file_item_raw.insert("mime_type", mime_type);
+        file_item_raw.insert("mime_type", mime_type.as_ref());
 
         let now = Utc::now();
 
@@ -966,7 +945,7 @@ impl FileCenter {
     }
 
     /// Temporarily input a file to the file center via a reader.
-    pub fn put_file_by_reader_temporarily<R: Read>(&self, mut reader: R, file_name: &str, mime_type: Option<&str>) -> Result<FileItem, FileCenterError> {
+    pub fn put_file_by_reader_temporarily<R: Read, S: AsRef<str>>(&self, mut reader: R, file_name: S, mime_type: Option<Mime>) -> Result<FileItem, FileCenterError> {
         let mut buffer = [0u8; BUFFER_SIZE];
 
         let mut temp = Vec::new();
@@ -989,6 +968,10 @@ impl FileCenter {
         }
 
         if gridfs {
+            let (hash_1, hash_2, hash_3, hash_4) = get_hash_by_random();
+
+            let file_name = file_name.as_ref();
+
             let store = Store::with_db(self.mongo_client_db.clone());
 
             let mut store_file: gridfs::file::File = store.create(file_name.to_string()).map_err(|err| FileCenterError::MongoDBError(err))?;
@@ -1018,6 +1001,10 @@ impl FileCenter {
             let file_size = buffer.len() as u64;
 
             let mut file_item_raw: Document = doc! {
+                "hash_1": hash_1,
+                "hash_2": hash_2,
+                "hash_3": hash_3,
+                "hash_4": hash_4,
                 "file_name": file_name,
                 "file_size": file_size,
                 "file_id": id.clone(),
@@ -1025,18 +1012,13 @@ impl FileCenter {
             };
 
             let mime_type = match mime_type {
-                Some(mime_type) => {
-                    if !MIME_TYPE_RE.is_match(mime_type) {
-                        return Err(FileCenterError::MimeTypeError);
-                    }
-                    mime_type
-                }
+                Some(mime_type) => mime_type,
                 None => {
                     DEFAULT_MIME_TYPE
                 }
             };
 
-            file_item_raw.insert("mime_type", mime_type);
+            file_item_raw.insert("mime_type", mime_type.as_ref());
 
             let now = Utc::now();
 
@@ -1048,17 +1030,6 @@ impl FileCenter {
 
             let result = collection_files.insert_one(file_item_raw.clone(), None).map_err(|err| FileCenterError::MongoDBError(err))?;
 
-            {
-                let db = self.mongo_client_db.clone();
-                thread::spawn(move || {
-                    thread::sleep(Duration::from_millis(TEMPORARY_LIFE_TIME as u64));
-
-                    let store = Store::with_db(db);
-
-                    if let Err(_) = store.remove_id(id) {};
-                });
-            }
-
             file_item_raw.insert("_id", result.inserted_id.unwrap());
 
             Ok(self.create_file_item(file_item_raw)?)
@@ -1067,7 +1038,7 @@ impl FileCenter {
         }
     }
 
-    /// Remove all unused files in fs.files and in COLLECTION_FILES.
+    /// Remove all unused files in GridFS and in the `COLLECTION_FILES_NAME` collection.
     pub fn clear_garbage(&self) -> Result<(), FileCenterError> {
         let collection_files: Collection = self.mongo_client_db.collection(COLLECTION_FILES_NAME);
         let fs_files: Collection = self.mongo_client_db.collection("fs.files");
@@ -1261,6 +1232,16 @@ fn get_hash_by_buffer<P: AsRef<[u8]>>(buffer: P) -> Result<(i64, i64, i64, i64),
     let result = sha3_256.result();
 
     Ok(separate_hash(&result))
+}
+
+fn get_hash_by_random() -> (i64, i64, i64, i64) {
+    let mut rng = thread_rng();
+    (
+        rng.gen(),
+        rng.gen(),
+        rng.gen(),
+        rng.gen(),
+    )
 }
 
 fn separate_hash(hash: &[u8]) -> (i64, i64, i64, i64) {
