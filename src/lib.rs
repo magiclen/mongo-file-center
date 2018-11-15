@@ -183,12 +183,12 @@ pub enum FileCenterError {
 
 impl FileCenter {
     /// Create a new FileCenter instance.
-    pub fn new(host: &str, port: u16, database: &str) -> Result<FileCenter, FileCenterError> {
+    pub fn new<H: AsRef<str>, D: AsRef<str>>(host: H, port: u16, database: D) -> Result<FileCenter, FileCenterError> {
         Self::new_with_file_size_threshold_inner(host, port, database, DEFAULT_FILE_SIZE_THRESHOLD)
     }
 
     /// Create a new FileCenter instance with a custom initial file size threshold.
-    pub fn new_with_file_size_threshold(host: &str, port: u16, database: &str, initial_file_size_threshold: i32) -> Result<FileCenter, FileCenterError> {
+    pub fn new_with_file_size_threshold<H: AsRef<str>, D: AsRef<str>>(host: H, port: u16, database: D, initial_file_size_threshold: i32) -> Result<FileCenter, FileCenterError> {
         if initial_file_size_threshold > MAX_FILE_SIZE_THRESHOLD || initial_file_size_threshold <= 0 {
             return Err(FileCenterError::FileSizeThresholdError);
         }
@@ -196,10 +196,10 @@ impl FileCenter {
         Self::new_with_file_size_threshold_inner(host, port, database, initial_file_size_threshold)
     }
 
-    fn new_with_file_size_threshold_inner(host: &str, port: u16, database: &str, initial_file_size_threshold: i32) -> Result<FileCenter, FileCenterError> {
-        let mongodb_client = Client::connect(host, port).map_err(|err| FileCenterError::MongoDBError(err))?;
+    fn new_with_file_size_threshold_inner<H: AsRef<str>, D: AsRef<str>>(host: H, port: u16, database: D, initial_file_size_threshold: i32) -> Result<FileCenter, FileCenterError> {
+        let mongodb_client = Client::connect(host.as_ref(), port).map_err(|err| FileCenterError::MongoDBError(err))?;
 
-        let mongo_client_db = mongodb_client.db(database);
+        let mongo_client_db = mongodb_client.db(database.as_ref());
 
         let file_size_threshold;
         let create_time;
@@ -596,14 +596,16 @@ impl FileCenter {
     }
 
     /// Input a file to the file center via a buffer.
-    pub fn put_file_by_buffer(&self, buffer: Vec<u8>, file_name: &str, mime_type: Option<Mime>) -> Result<FileItem, FileCenterError> {
+    pub fn put_file_by_buffer<S: AsRef<str>>(&self, buffer: Vec<u8>, file_name: S, mime_type: Option<Mime>) -> Result<FileItem, FileCenterError> {
         let (hash_1, hash_2, hash_3, hash_4) = get_hash_by_buffer(&buffer).map_err(|err| FileCenterError::IOError(err))?;
 
         self.put_file_by_buffer_inner(buffer, file_name, mime_type, (hash_1, hash_2, hash_3, hash_4))
     }
 
-    fn put_file_by_buffer_inner(&self, buffer: Vec<u8>, file_name: &str, mime_type: Option<Mime>, (hash_1, hash_2, hash_3, hash_4): (i64, i64, i64, i64)) -> Result<FileItem, FileCenterError> {
+    fn put_file_by_buffer_inner<S: AsRef<str>>(&self, buffer: Vec<u8>, file_name: S, mime_type: Option<Mime>, (hash_1, hash_2, hash_3, hash_4): (i64, i64, i64, i64)) -> Result<FileItem, FileCenterError> {
         let collection_files: Collection = self.mongo_client_db.collection(COLLECTION_FILES_NAME);
+
+        let file_name = file_name.as_ref();
 
         let mut options = FindOneAndUpdateOptions::new();
         options.return_document = Some(ReturnDocument::After);
@@ -676,7 +678,9 @@ impl FileCenter {
     }
 
     /// Input a file to the file center via a reader.
-    pub fn put_file_by_reader<R: Read>(&self, mut reader: R, file_name: &str, mime_type: Option<Mime>) -> Result<FileItem, FileCenterError> {
+    pub fn put_file_by_reader<R: Read, S: AsRef<str>>(&self, mut reader: R, file_name: S, mime_type: Option<Mime>) -> Result<FileItem, FileCenterError> {
+        let file_name = file_name.as_ref();
+
         let mut buffer = [0u8; BUFFER_SIZE];
 
         let mut sha3_256 = Sha3_256::new();
