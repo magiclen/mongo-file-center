@@ -47,7 +47,7 @@ match r_file.into_file_data() {
 ```
 */
 #[macro_use(bson, doc)]
-extern crate bson;
+pub extern crate bson;
 
 #[macro_use]
 extern crate lazy_static;
