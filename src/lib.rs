@@ -491,7 +491,7 @@ impl FileCenter {
     }
 
     /// Input a file to the file center via a file path.
-    pub fn put_file_by_path<P: AsRef<Path>, S: AsRef<str>>(&self, file_path: P, file_name: Option<S>, mime_type: Option<Mime>) -> Result<FileItem, FileCenterError> {
+    pub fn put_file_by_path<P: AsRef<Path>, S: Into<String>>(&self, file_path: P, file_name: Option<S>, mime_type: Option<Mime>) -> Result<FileItem, FileCenterError> {
         let file_path = file_path.as_ref();
 
         let (hash_1, hash_2, hash_3, hash_4) = get_hash_by_path(file_path).map_err(|err| FileCenterError::IOError(err))?;
@@ -518,10 +518,10 @@ impl FileCenter {
                 Ok(self.create_file_item(result)?)
             }
             None => {
-                let file_name = match file_name.as_ref() {
-                    Some(file_name) => file_name.as_ref(),
+                let file_name = match file_name {
+                    Some(file_name) => file_name.into(),
                     None => {
-                        file_path.file_name().unwrap().to_str().unwrap()
+                        file_path.file_name().unwrap().to_str().unwrap().to_string()
                     }
                 };
 
@@ -536,14 +536,13 @@ impl FileCenter {
                     "hash_2": hash_2,
                     "hash_3": hash_3,
                     "hash_4": hash_4,
-                    "file_name": file_name,
                     "file_size": file_size,
                     "count": 1i32
                 };
 
                 if file_size >= self.file_size_threshold as u64 {
                     let store = Store::with_db(self.mongo_client_db.clone());
-                    let mut store_file: gridfs::file::File = store.create(file_name.to_string()).map_err(|err| FileCenterError::MongoDBError(err))?;
+                    let mut store_file: gridfs::file::File = store.create(file_name.clone()).map_err(|err| FileCenterError::MongoDBError(err))?;
                     let mut file = File::open(file_path).map_err(|err| FileCenterError::IOError(err))?;
                     let mut buffer = [0u8; BUFFER_SIZE];
 
@@ -563,11 +562,13 @@ impl FileCenter {
 
                     drop(store_file);
 
+                    file_item_raw.insert("file_name", file_name);
                     file_item_raw.insert("file_id", id);
                     drop(file);
                 } else {
                     let mut file_data = Vec::new();
                     file.read_to_end(&mut file_data).map_err(|err| FileCenterError::IOError(err))?;
+                    file_item_raw.insert("file_name", file_name);
                     file_item_raw.insert("file_data", Bson::Binary(BinarySubtype::Generic, file_data));
                     drop(file);
                 }
@@ -596,16 +597,16 @@ impl FileCenter {
     }
 
     /// Input a file to the file center via a buffer.
-    pub fn put_file_by_buffer<S: AsRef<str>>(&self, buffer: Vec<u8>, file_name: S, mime_type: Option<Mime>) -> Result<FileItem, FileCenterError> {
+    pub fn put_file_by_buffer<S: Into<String>>(&self, buffer: Vec<u8>, file_name: S, mime_type: Option<Mime>) -> Result<FileItem, FileCenterError> {
         let (hash_1, hash_2, hash_3, hash_4) = get_hash_by_buffer(&buffer).map_err(|err| FileCenterError::IOError(err))?;
 
         self.put_file_by_buffer_inner(buffer, file_name, mime_type, (hash_1, hash_2, hash_3, hash_4))
     }
 
-    fn put_file_by_buffer_inner<S: AsRef<str>>(&self, buffer: Vec<u8>, file_name: S, mime_type: Option<Mime>, (hash_1, hash_2, hash_3, hash_4): (i64, i64, i64, i64)) -> Result<FileItem, FileCenterError> {
+    fn put_file_by_buffer_inner<S: Into<String>>(&self, buffer: Vec<u8>, file_name: S, mime_type: Option<Mime>, (hash_1, hash_2, hash_3, hash_4): (i64, i64, i64, i64)) -> Result<FileItem, FileCenterError> {
         let collection_files: Collection = self.mongo_client_db.collection(COLLECTION_FILES_NAME);
 
-        let file_name = file_name.as_ref();
+        let file_name = file_name.into();
 
         let mut options = FindOneAndUpdateOptions::new();
         options.return_document = Some(ReturnDocument::After);
@@ -634,7 +635,6 @@ impl FileCenter {
                     "hash_2": hash_2,
                     "hash_3": hash_3,
                     "hash_4": hash_4,
-                    "file_name": file_name,
                     "file_size": file_size,
                     "count": 1i32
                 };
@@ -642,7 +642,7 @@ impl FileCenter {
                 if file_size >= self.file_size_threshold as u64 {
                     let store = Store::with_db(self.mongo_client_db.clone());
 
-                    let mut store_file: gridfs::file::File = store.create(file_name.to_string()).map_err(|err| FileCenterError::MongoDBError(err))?;
+                    let mut store_file: gridfs::file::File = store.create(file_name.clone()).map_err(|err| FileCenterError::MongoDBError(err))?;
 
                     store_file.write(&buffer).map_err(|err| FileCenterError::IOError(err))?;
 
@@ -652,8 +652,10 @@ impl FileCenter {
 
                     drop(store_file);
 
+                    file_item_raw.insert("file_name", file_name);
                     file_item_raw.insert("file_id", id);
                 } else {
+                    file_item_raw.insert("file_name", file_name);
                     file_item_raw.insert("file_data", Bson::Binary(BinarySubtype::Generic, buffer));
                 }
 
@@ -678,9 +680,7 @@ impl FileCenter {
     }
 
     /// Input a file to the file center via a reader.
-    pub fn put_file_by_reader<R: Read, S: AsRef<str>>(&self, mut reader: R, file_name: S, mime_type: Option<Mime>) -> Result<FileItem, FileCenterError> {
-        let file_name = file_name.as_ref();
-
+    pub fn put_file_by_reader<R: Read, S: Into<String>>(&self, mut reader: R, file_name: S, mime_type: Option<Mime>) -> Result<FileItem, FileCenterError> {
         let mut buffer = [0u8; BUFFER_SIZE];
 
         let mut sha3_256 = Sha3_256::new();
@@ -709,8 +709,10 @@ impl FileCenter {
         }
 
         if gridfs {
+            let file_name = file_name.into();
+
             let store = Store::with_db(self.mongo_client_db.clone());
-            let mut store_file: gridfs::file::File = store.create(file_name.to_string()).map_err(|err| FileCenterError::MongoDBError(err))?;
+            let mut store_file: gridfs::file::File = store.create(file_name.clone()).map_err(|err| FileCenterError::MongoDBError(err))?;
 
             store_file.write(&temp).map_err(|err| FileCenterError::IOError(err))?;
 
@@ -798,17 +800,17 @@ impl FileCenter {
     }
 
     /// Temporarily input a file to the file center via a file path.
-    pub fn put_file_by_path_temporarily<P: AsRef<Path>, S: AsRef<str>>(&self, file_path: P, file_name: Option<S>, mime_type: Option<Mime>) -> Result<FileItem, FileCenterError> {
+    pub fn put_file_by_path_temporarily<P: AsRef<Path>, S: Into<String>>(&self, file_path: P, file_name: Option<S>, mime_type: Option<Mime>) -> Result<FileItem, FileCenterError> {
         let collection_files: Collection = self.mongo_client_db.collection(COLLECTION_FILES_NAME);
 
         let (hash_1, hash_2, hash_3, hash_4) = get_hash_by_random();
 
         let file_path = file_path.as_ref();
 
-        let file_name = match file_name.as_ref() {
-            Some(file_name) => file_name.as_ref(),
+        let file_name = match file_name {
+            Some(file_name) => file_name.into(),
             None => {
-                file_path.file_name().unwrap().to_str().unwrap()
+                file_path.file_name().unwrap().to_str().unwrap().to_string()
             }
         };
 
@@ -823,14 +825,13 @@ impl FileCenter {
             "hash_2": hash_2,
             "hash_3": hash_3,
             "hash_4": hash_4,
-            "file_name": file_name,
             "file_size": file_size,
             "count": 1i32
         };
 
         if file_size >= self.file_size_threshold as u64 {
             let store = Store::with_db(self.mongo_client_db.clone());
-            let mut store_file: gridfs::file::File = store.create(file_name.to_string()).map_err(|err| FileCenterError::MongoDBError(err))?;
+            let mut store_file: gridfs::file::File = store.create(file_name.clone()).map_err(|err| FileCenterError::MongoDBError(err))?;
             let mut file = File::open(file_path).map_err(|err| FileCenterError::IOError(err))?;
             let mut buffer = [0u8; BUFFER_SIZE];
 
@@ -850,11 +851,13 @@ impl FileCenter {
 
             drop(store_file);
 
+            file_item_raw.insert("file_name", file_name);
             file_item_raw.insert("file_id", id.clone());
             drop(file);
         } else {
             let mut file_data = Vec::new();
             file.read_to_end(&mut file_data).map_err(|err| FileCenterError::IOError(err))?;
+            file_item_raw.insert("file_name", file_name);
             file_item_raw.insert("file_data", Bson::Binary(BinarySubtype::Generic, file_data));
             drop(file);
         }
@@ -887,21 +890,20 @@ impl FileCenter {
     }
 
     /// Temporarily input a file to the file center via a buffer.
-    pub fn put_file_by_buffer_temporarily<S: AsRef<str>>(&self, buffer: Vec<u8>, file_name: S, mime_type: Option<Mime>) -> Result<FileItem, FileCenterError> {
+    pub fn put_file_by_buffer_temporarily<S: Into<String>>(&self, buffer: Vec<u8>, file_name: S, mime_type: Option<Mime>) -> Result<FileItem, FileCenterError> {
         let collection_files: Collection = self.mongo_client_db.collection(COLLECTION_FILES_NAME);
 
         let (hash_1, hash_2, hash_3, hash_4) = get_hash_by_random();
 
         let file_size = buffer.len() as u64;
 
-        let file_name = file_name.as_ref();
+        let file_name = file_name.into();
 
         let mut file_item_raw: Document = doc! {
             "hash_1": hash_1,
             "hash_2": hash_2,
             "hash_3": hash_3,
             "hash_4": hash_4,
-            "file_name": file_name,
             "file_size": file_size,
             "count": 1i32
         };
@@ -909,7 +911,7 @@ impl FileCenter {
         if file_size >= self.file_size_threshold as u64 {
             let store = Store::with_db(self.mongo_client_db.clone());
 
-            let mut store_file: gridfs::file::File = store.create(file_name.to_string()).map_err(|err| FileCenterError::MongoDBError(err))?;
+            let mut store_file: gridfs::file::File = store.create(file_name.clone()).map_err(|err| FileCenterError::MongoDBError(err))?;
 
             store_file.write(&buffer).map_err(|err| FileCenterError::IOError(err))?;
 
@@ -919,8 +921,10 @@ impl FileCenter {
 
             drop(store_file);
 
+            file_item_raw.insert("file_name", file_name);
             file_item_raw.insert("file_id", id.clone());
         } else {
+            file_item_raw.insert("file_name", file_name);
             file_item_raw.insert("file_data", Bson::Binary(BinarySubtype::Generic, buffer));
         }
 
@@ -949,7 +953,7 @@ impl FileCenter {
     }
 
     /// Temporarily input a file to the file center via a reader.
-    pub fn put_file_by_reader_temporarily<R: Read, S: AsRef<str>>(&self, mut reader: R, file_name: S, mime_type: Option<Mime>) -> Result<FileItem, FileCenterError> {
+    pub fn put_file_by_reader_temporarily<R: Read, S: Into<String>>(&self, mut reader: R, file_name: S, mime_type: Option<Mime>) -> Result<FileItem, FileCenterError> {
         let mut buffer = [0u8; BUFFER_SIZE];
 
         let mut temp = Vec::new();
@@ -974,11 +978,11 @@ impl FileCenter {
         if gridfs {
             let (hash_1, hash_2, hash_3, hash_4) = get_hash_by_random();
 
-            let file_name = file_name.as_ref();
+            let file_name = file_name.into();
 
             let store = Store::with_db(self.mongo_client_db.clone());
 
-            let mut store_file: gridfs::file::File = store.create(file_name.to_string()).map_err(|err| FileCenterError::MongoDBError(err))?;
+            let mut store_file: gridfs::file::File = store.create(file_name.clone()).map_err(|err| FileCenterError::MongoDBError(err))?;
 
             store_file.write(&temp).map_err(|err| FileCenterError::IOError(err))?;
 
