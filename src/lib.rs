@@ -689,6 +689,8 @@ impl FileCenter {
 
         let mut gridfs = false;
 
+        let mut file_size = buffer.len();
+
         loop {
             let c = reader.read(&mut buffer).map_err(|err| FileCenterError::IOError(err))?;
 
@@ -701,6 +703,8 @@ impl FileCenter {
             sha3_256.input(buf);
 
             temp.extend_from_slice(buf);
+
+            file_size += c;
 
             if temp.len() as u64 >= self.file_size_threshold as u64 {
                 gridfs = true;
@@ -730,6 +734,8 @@ impl FileCenter {
                 sha3_256.input(buf);
 
                 store_file.write(buf).map_err(|err| FileCenterError::IOError(err))?;
+
+                file_size += c;
             }
 
             store_file.flush().map_err(|err| FileCenterError::IOError(err))?;
@@ -763,15 +769,13 @@ impl FileCenter {
                     Ok(self.create_file_item(result)?)
                 }
                 None => {
-                    let file_size = buffer.len() as u64;
-
                     let mut file_item_raw: Document = doc! {
                         "hash_1": hash_1,
                         "hash_2": hash_2,
                         "hash_3": hash_3,
                         "hash_4": hash_4,
                         "file_name": file_name,
-                        "file_size": file_size,
+                        "file_size": file_size as u64,
                         "file_id": id,
                         "count": 1i32
                     };
@@ -960,6 +964,8 @@ impl FileCenter {
 
         let mut gridfs = false;
 
+        let mut file_size = 0;
+
         loop {
             let c = reader.read(&mut buffer).map_err(|err| FileCenterError::IOError(err))?;
 
@@ -968,6 +974,8 @@ impl FileCenter {
             }
 
             temp.extend_from_slice(&buffer[..c]);
+
+            file_size += c;
 
             if temp.len() as u64 >= self.file_size_threshold as u64 {
                 gridfs = true;
@@ -996,6 +1004,8 @@ impl FileCenter {
                 }
 
                 store_file.write(&buffer[..c]).map_err(|err| FileCenterError::IOError(err))?;
+
+                file_size += c;
             }
 
             store_file.flush().map_err(|err| FileCenterError::IOError(err))?;
@@ -1006,15 +1016,13 @@ impl FileCenter {
 
             let collection_files: Collection = self.mongo_client_db.collection(COLLECTION_FILES_NAME);
 
-            let file_size = buffer.len() as u64;
-
             let mut file_item_raw: Document = doc! {
                 "hash_1": hash_1,
                 "hash_2": hash_2,
                 "hash_3": hash_3,
                 "hash_4": hash_4,
                 "file_name": file_name,
-                "file_size": file_size,
+                "file_size": file_size as u64,
                 "file_id": id.clone(),
                 "count": 1i32
             };
