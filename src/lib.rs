@@ -94,14 +94,14 @@ use std::str::FromStr;
 const BUFFER_SIZE: usize = 4096;
 const DEFAULT_MIME_TYPE: Mime = mime::APPLICATION_OCTET_STREAM;
 
-const COLLECTION_FILES_NAME: &str = "file_center";
-const COLLECTION_SETTINGS_NAME: &str = "file_center_settings";
+pub const COLLECTION_FILES_NAME: &str = "file_center";
+pub const COLLECTION_SETTINGS_NAME: &str = "file_center_settings";
 const MAX_FILE_SIZE_THRESHOLD: i32 = 16770000;
 const DEFAULT_FILE_SIZE_THRESHOLD: i32 = 261120;
 
-const SETTING_FILE_SIZE_THRESHOLD: &str = "file_size_threshold";
-const SETTING_CREATE_TIME: &str = "create_time";
-const SETTING_VERSION: &str = "version";
+pub const SETTING_FILE_SIZE_THRESHOLD: &str = "file_size_threshold";
+pub const SETTING_CREATE_TIME: &str = "create_time";
+pub const SETTING_VERSION: &str = "version";
 
 const VERSION: i32 = 1; // Used for updating the database.
 
@@ -1082,40 +1082,38 @@ impl FileCenter {
                 array
             };
 
-            if files.len() > 0 {
-                let afs: Vec<Bson> = {
-                    let mut options = FindOptions::new();
-                    options.projection = Some(ID_PROJECTION.clone());
+            let afs: Vec<Bson> = {
+                let mut options = FindOptions::new();
+                options.projection = Some(ID_PROJECTION.clone());
 
-                    let mut result = collection_files.find(Some(doc! {
-                        "file_id": {
-                            "$nin": Bson::Array(files),
-                            "$exists": true
-                        }
-                     }), Some(options)).map_err(|err| FileCenterError::MongoDBError(err))?;
-
-                    let mut array = Vec::new();
-
-                    while result.has_next().map_err(|err| FileCenterError::MongoDBError(err))? {
-                        let mut doc = result.next().unwrap().map_err(|err| FileCenterError::MongoDBError(err))?;
-
-                        let id = doc.remove("_id").ok_or(FileCenterError::DocumentError(bson::ValueAccessError::NotPresent))?;
-                        match id {
-                            Bson::ObjectId(id) => array.push(Bson::ObjectId(id)),
-                            _ => return Err(FileCenterError::DocumentError(bson::ValueAccessError::UnexpectedType))
-                        }
+                let mut result = collection_files.find(Some(doc! {
+                    "file_id": {
+                        "$nin": Bson::Array(files),
+                        "$exists": true
                     }
+                }), Some(options)).map_err(|err| FileCenterError::MongoDBError(err))?;
 
-                    array
-                };
+                let mut array = Vec::new();
 
-                if afs.len() > 0 {
-                    collection_files.delete_many(doc! {
-                        "_id": {
-                            "$in": Bson::Array(afs)
-                        }
-                    }, None).map_err(|err| FileCenterError::MongoDBError(err))?;
+                while result.has_next().map_err(|err| FileCenterError::MongoDBError(err))? {
+                    let mut doc = result.next().unwrap().map_err(|err| FileCenterError::MongoDBError(err))?;
+
+                    let id = doc.remove("_id").ok_or(FileCenterError::DocumentError(bson::ValueAccessError::NotPresent))?;
+                    match id {
+                        Bson::ObjectId(id) => array.push(Bson::ObjectId(id)),
+                        _ => return Err(FileCenterError::DocumentError(bson::ValueAccessError::UnexpectedType))
+                    }
                 }
+
+                array
+            };
+
+            if afs.len() > 0 {
+                collection_files.delete_many(doc! {
+                    "_id": {
+                        "$in": Bson::Array(afs)
+                    }
+                }, None).map_err(|err| FileCenterError::MongoDBError(err))?;
             }
         }
 
@@ -1143,6 +1141,22 @@ impl FileCenter {
             };
 
             if files.len() > 0 {
+                let mut result = collection_files.find(Some(doc! {
+                    "_id": {
+                        "$in": Bson::Array(files.clone())
+                    }
+                }), None).map_err(|err| FileCenterError::MongoDBError(err))?;
+
+                while result.has_next().map_err(|err| FileCenterError::MongoDBError(err))? {
+                    let mut doc: Document = result.next().unwrap().map_err(|err| FileCenterError::MongoDBError(err))?;
+
+                    if let Some(Bson::ObjectId(b)) = doc.remove("file_id") {
+                        fs_files.delete_one(doc! {
+                            "_id": b
+                        }, None).unwrap();
+                    }
+                }
+
                 collection_files.delete_many(doc! {
                     "_id": {
                         "$in": Bson::Array(files)
@@ -1174,43 +1188,46 @@ impl FileCenter {
                 array
             };
 
-            if files.len() > 0 {
-                let fsfs: Vec<ObjectId> = {
-                    let mut options = FindOptions::new();
-                    options.projection = Some(ID_PROJECTION.clone());
+            let fsfs: Vec<ObjectId> = {
+                let mut options = FindOptions::new();
+                options.projection = Some(ID_PROJECTION.clone());
 
-                    let mut result = fs_files.find(Some(doc! {
+                let mut result = fs_files.find(Some(doc! {
                         "_id": {
                             "$nin": Bson::Array(files)
                         }
                      }), Some(options)).map_err(|err| FileCenterError::MongoDBError(err))?;
 
-                    let mut array = Vec::new();
+                let mut array = Vec::new();
 
-                    while result.has_next().map_err(|err| FileCenterError::MongoDBError(err))? {
-                        let mut doc = result.next().unwrap().map_err(|err| FileCenterError::MongoDBError(err))?;
+                while result.has_next().map_err(|err| FileCenterError::MongoDBError(err))? {
+                    let mut doc = result.next().unwrap().map_err(|err| FileCenterError::MongoDBError(err))?;
 
-                        let id = doc.remove("_id").ok_or(FileCenterError::DocumentError(bson::ValueAccessError::NotPresent))?;
-                        match id {
-                            Bson::ObjectId(id) => array.push(id),
-                            _ => return Err(FileCenterError::DocumentError(bson::ValueAccessError::UnexpectedType))
-                        }
+                    let id = doc.remove("_id").ok_or(FileCenterError::DocumentError(bson::ValueAccessError::NotPresent))?;
+                    match id {
+                        Bson::ObjectId(id) => array.push(id),
+                        _ => return Err(FileCenterError::DocumentError(bson::ValueAccessError::UnexpectedType))
                     }
+                }
 
-                    array
-                };
+                array
+            };
 
-                if fsfs.len() > 0 {
-                    let store = Store::with_db(self.mongo_client_db.clone());
+            if fsfs.len() > 0 {
+                let store = Store::with_db(self.mongo_client_db.clone());
 
-                    for id in fsfs {
-                        store.remove_id(id).map_err(|err| FileCenterError::MongoDBError(err))?;
-                    }
+                for id in fsfs {
+                    store.remove_id(id).map_err(|err| FileCenterError::MongoDBError(err))?;
                 }
             }
         }
 
         Ok(())
+    }
+
+    /// Get the instance of MongoDB Database.
+    pub fn get_mongo_client_db(&self) -> &Database {
+        &self.mongo_client_db
     }
 }
 

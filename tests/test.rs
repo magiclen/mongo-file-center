@@ -1,4 +1,5 @@
 extern crate mongo_file_center;
+#[macro_use]
 extern crate bson;
 extern crate mime;
 
@@ -7,7 +8,7 @@ use std::io::Read;
 
 use bson::oid::ObjectId;
 
-use mongo_file_center::{FileCenter, FileData};
+use mongo_file_center::{mongodb::{db::ThreadedDatabase, coll::Collection}, FileCenter, FileData};
 
 const HOST: &str = "localhost";
 const PORT: u16 = 27017;
@@ -293,12 +294,61 @@ fn input_output_gridfs_temporarily() {
 #[test]
 fn clear_garbage() {
     let database = "test_input_output_gridfs";
-
     let file_center = FileCenter::new(HOST, PORT, database).unwrap();
 
-    // TODO: more cases
+    {
+        let db = file_center.get_mongo_client_db();
+        let fs_files: Collection = db.collection("fs.files");
+        let collection_files: Collection = db.collection(mongo_file_center::COLLECTION_FILES_NAME);
 
-    file_center.clear_garbage().unwrap();
+        // unnecessary file items which have file_id but the target file does not exist
+        {
+            let file = file_center.put_file_by_path(FILE_PATH, None::<String>, None).unwrap();
+            let object_id = file.get_object_id();
+            file_center.clear_garbage().unwrap();
+            collection_files.find_one(Some(doc! {
+                "_id": object_id.clone()
+            }), None).unwrap().unwrap();
+            fs_files.delete_many(doc! {}, None).unwrap();
+            file_center.clear_garbage().unwrap();
+            assert!(collection_files.find_one(Some(doc! {
+                "_id": object_id.clone()
+            }), None).unwrap().is_none());
+        }
+
+        // unnecessary file items whose count are smaller than or equal to 0
+        {
+            let file = file_center.put_file_by_path(FILE_PATH, None::<String>, None).unwrap();
+            let object_id = file.get_object_id();
+            file_center.clear_garbage().unwrap();
+            collection_files.find_one(Some(doc! {
+                "_id": object_id.clone()
+            }), None).unwrap().unwrap();
+            collection_files.update_one(doc! {}, doc! {
+                "$set": {
+                    "count": 0
+                }
+            }, None).unwrap();
+            file_center.clear_garbage().unwrap();
+            assert!(collection_files.find_one(Some(doc! {
+                "_id": object_id.clone()
+            }), None).unwrap().is_none());
+            assert_eq!(0, fs_files.count(Some(doc! {}), None).unwrap());
+        }
+
+        // unnecessary GridFS files which are not used in file items
+        {
+            let file = file_center.put_file_by_path(FILE_PATH, None::<String>, None).unwrap();
+            let object_id = file.get_object_id();
+            file_center.clear_garbage().unwrap();
+            assert_eq!(1, fs_files.count(Some(doc! {}), None).unwrap());
+            collection_files.delete_one(doc! {
+                "_id": object_id.clone()
+            }, None).unwrap();
+            file_center.clear_garbage().unwrap();
+            assert_eq!(0, fs_files.count(Some(doc! {}), None).unwrap());
+        }
+    }
 
     file_center.drop_database().unwrap();
 }
