@@ -1,6 +1,6 @@
 [package]
 name = "mongo-file-center"
-version = "0.1.10"
+version = "0.1.11"
 authors = ["Magic Len <len@magiclen.org>"]
 repository = "https://github.com/magiclen/mongo-file-center"
 homepage = "https://magiclen.org/mongo-file-center"
@@ -19,7 +19,7 @@ bson = "0.13"
 short-crypt = "1.0.6"
 lazy_static = "1.1.0"
 chrono = "0.4.6"
-sha3 = "0.8.0"
+sha3 = "0.8.1"
 mime = "0.3.13"
 mime_guess = "2.0.0-alpha.6"
-rand = ">=0.6.0, <=0.6.1"
+rand = "0.6"

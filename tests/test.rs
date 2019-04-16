@@ -293,7 +293,7 @@ fn input_output_gridfs_temporarily() {
 
 #[test]
 fn clear_garbage() {
-    let database = "test_input_output_gridfs";
+    let database = "test_clear_garbage";
     let file_center = FileCenter::new(HOST, PORT, database).unwrap();
 
     {
