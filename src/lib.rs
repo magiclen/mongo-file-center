@@ -155,6 +155,7 @@ lazy_static! {
 }
 
 /// To store perennial files and temporary files in MongoDB.
+#[derive(Debug)]
 pub struct FileCenter {
     mongo_client_db: Database,
     file_size_threshold: i32,

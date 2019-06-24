@@ -1,6 +1,6 @@
 [package]
 name = "mongo-file-center"
-version = "0.1.11"
+version = "0.1.12"
 authors = ["Magic Len <len@magiclen.org>"]
 repository = "https://github.com/magiclen/mongo-file-center"
 homepage = "https://magiclen.org/mongo-file-center"
@@ -16,7 +16,7 @@ travis-ci = { repository = "magiclen/mongo-file-center", branch = "master" }
 [dependencies]
 mongodb = "0.3.12"
 bson = "0.13"
-short-crypt = "1.0.6"
+short-crypt = "1.0.7"
 lazy_static = "1.1.0"
 chrono = "0.4.6"
 sha3 = "0.8.1"
