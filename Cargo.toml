@@ -10,8 +10,9 @@ description= "To store perennial files and temporary files in MongoDB."
 readme = "README.md"
 license = "MIT"
 
-[badges]
-travis-ci = { repository = "magiclen/mongo-file-center", branch = "master" }
+[badges.travis-ci]
+repository = "magiclen/mongo-file-center"
+branch = "master"
 
 [dependencies]
 mongodb = "0.3.12"
