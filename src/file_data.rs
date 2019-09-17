@@ -1,5 +1,5 @@
-use std::io::{self, Read};
 use mongodb::gridfs::file::File;
+use std::io::{self, Read};
 
 /// To represent the file data retrieved from MongoDB.
 #[derive(Debug)]
@@ -7,7 +7,7 @@ pub enum FileData {
     /// Data from collections are buffered in memory as a Vec<u8> instance.
     Collection(Vec<u8>),
     /// Data from GridFS are represented by a GridFS file.
-    GridFS(File),
+    GridFS(Box<File>),
 }
 
 impl FileData {

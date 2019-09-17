@@ -8,7 +8,10 @@ use std::io::Read;
 
 use bson::oid::ObjectId;
 
-use mongo_file_center::{mongodb::{db::ThreadedDatabase, coll::Collection}, FileCenter, FileData};
+use mongo_file_center::{
+    mongodb::{coll::Collection, db::ThreadedDatabase},
+    FileCenter, FileData,
+};
 
 const HOST: &str = "localhost";
 const PORT: u16 = 27017;
@@ -66,11 +69,14 @@ fn input_output_collection() {
     let file = file_center.put_file_by_path(FILE_PATH, None::<String>, None).unwrap();
 
     {
-        let file_2 = file_center.put_file_by_reader(File::open(FILE_PATH).unwrap(), "", None).unwrap();
+        let file_2 =
+            file_center.put_file_by_reader(File::open(FILE_PATH).unwrap(), "", None).unwrap();
 
         assert_eq!(file.get_object_id(), file_2.get_object_id());
 
-        let file_3 = file_center.put_file_by_buffer(file_2.into_file_data().into_vec_unchecked(), "", None).unwrap();
+        let file_3 = file_center
+            .put_file_by_buffer(file_2.into_file_data().into_vec_unchecked(), "", None)
+            .unwrap();
 
         assert_eq!(file.get_object_id(), file_3.get_object_id());
     }
@@ -99,14 +105,18 @@ fn input_output_gridfs() {
 
     let file_center = FileCenter::new(HOST, PORT, database).unwrap();
 
-    let file = file_center.put_file_by_path(FILE_PATH, None::<String>, Some(mime::IMAGE_JPEG)).unwrap();
+    let file =
+        file_center.put_file_by_path(FILE_PATH, None::<String>, Some(mime::IMAGE_JPEG)).unwrap();
 
     {
-        let file_2 = file_center.put_file_by_reader(File::open(FILE_PATH).unwrap(), "", None).unwrap();
+        let file_2 =
+            file_center.put_file_by_reader(File::open(FILE_PATH).unwrap(), "", None).unwrap();
 
         assert_eq!(file.get_object_id(), file_2.get_object_id());
 
-        let file_3 = file_center.put_file_by_buffer(file_2.into_file_data().into_vec_unchecked(), "", None).unwrap();
+        let file_3 = file_center
+            .put_file_by_buffer(file_2.into_file_data().into_vec_unchecked(), "", None)
+            .unwrap();
 
         assert_eq!(file.get_object_id(), file_3.get_object_id());
     }
@@ -137,7 +147,8 @@ fn input_output_gridfs() {
 fn delete_collection() {
     let database = "test_delete_collection";
 
-    let file_center = FileCenter::new_with_file_size_threshold(HOST, PORT, database, SIZE_THRESHOLD).unwrap();
+    let file_center =
+        FileCenter::new_with_file_size_threshold(HOST, PORT, database, SIZE_THRESHOLD).unwrap();
 
     let file = file_center.put_file_by_path(FILE_PATH, None::<String>, None).unwrap();
 
@@ -179,7 +190,8 @@ fn delete_gridfs() {
 
     let file_center = FileCenter::new(HOST, PORT, database).unwrap();
 
-    let file = file_center.put_file_by_path(FILE_PATH, None::<String>, Some(mime::IMAGE_JPEG)).unwrap();
+    let file =
+        file_center.put_file_by_path(FILE_PATH, None::<String>, Some(mime::IMAGE_JPEG)).unwrap();
 
     let file_id = file.get_object_id();
 
@@ -188,7 +200,8 @@ fn delete_gridfs() {
 
     file_center.put_file_by_path(FILE_PATH, None::<String>, None).unwrap();
 
-    let file = file_center.put_file_by_path(FILE_PATH, None::<String>, Some(mime::IMAGE_JPEG)).unwrap();
+    let file =
+        file_center.put_file_by_path(FILE_PATH, None::<String>, Some(mime::IMAGE_JPEG)).unwrap();
 
     let file_id = file.get_object_id().clone();
     let file_size = file.get_file_size();
@@ -226,8 +239,11 @@ fn input_output_collection_temporarily() {
     file_center.set_file_size_threshold(SIZE_THRESHOLD).unwrap();
 
     let file = file_center.put_file_by_path_temporarily(FILE_PATH, None::<String>, None).unwrap();
-    let file_2 = file_center.put_file_by_buffer_temporarily(fs::read(FILE_PATH).unwrap(), "", None).unwrap();
-    let file_3 = file_center.put_file_by_reader_temporarily(File::open(FILE_PATH).unwrap(), "", None).unwrap();
+    let file_2 =
+        file_center.put_file_by_buffer_temporarily(fs::read(FILE_PATH).unwrap(), "", None).unwrap();
+    let file_3 = file_center
+        .put_file_by_reader_temporarily(File::open(FILE_PATH).unwrap(), "", None)
+        .unwrap();
 
     assert_ne!(file.get_object_id(), file_2.get_object_id());
 
@@ -260,8 +276,11 @@ fn input_output_gridfs_temporarily() {
     let file_center = FileCenter::new(HOST, PORT, database).unwrap();
 
     let file = file_center.put_file_by_path_temporarily(FILE_PATH, None::<String>, None).unwrap();
-    let file_2 = file_center.put_file_by_buffer_temporarily(fs::read(FILE_PATH).unwrap(), "", None).unwrap();
-    let file_3 = file_center.put_file_by_reader_temporarily(File::open(FILE_PATH).unwrap(), "", None).unwrap();
+    let file_2 =
+        file_center.put_file_by_buffer_temporarily(fs::read(FILE_PATH).unwrap(), "", None).unwrap();
+    let file_3 = file_center
+        .put_file_by_reader_temporarily(File::open(FILE_PATH).unwrap(), "", None)
+        .unwrap();
 
     assert_ne!(file.get_object_id(), file_2.get_object_id());
 
@@ -306,14 +325,26 @@ fn clear_garbage() {
             let file = file_center.put_file_by_path(FILE_PATH, None::<String>, None).unwrap();
             let object_id = file.get_object_id();
             file_center.clear_garbage().unwrap();
-            collection_files.find_one(Some(doc! {
-                "_id": object_id.clone()
-            }), None).unwrap().unwrap();
+            collection_files
+                .find_one(
+                    Some(doc! {
+                        "_id": object_id.clone()
+                    }),
+                    None,
+                )
+                .unwrap()
+                .unwrap();
             fs_files.delete_many(doc! {}, None).unwrap();
             file_center.clear_garbage().unwrap();
-            assert!(collection_files.find_one(Some(doc! {
-                "_id": object_id.clone()
-            }), None).unwrap().is_none());
+            assert!(collection_files
+                .find_one(
+                    Some(doc! {
+                        "_id": object_id.clone()
+                    }),
+                    None
+                )
+                .unwrap()
+                .is_none());
         }
 
         // unnecessary file items whose count are smaller than or equal to 0
@@ -321,18 +352,36 @@ fn clear_garbage() {
             let file = file_center.put_file_by_path(FILE_PATH, None::<String>, None).unwrap();
             let object_id = file.get_object_id();
             file_center.clear_garbage().unwrap();
-            collection_files.find_one(Some(doc! {
-                "_id": object_id.clone()
-            }), None).unwrap().unwrap();
-            collection_files.update_one(doc! {}, doc! {
-                "$set": {
-                    "count": 0
-                }
-            }, None).unwrap();
+            collection_files
+                .find_one(
+                    Some(doc! {
+                        "_id": object_id.clone()
+                    }),
+                    None,
+                )
+                .unwrap()
+                .unwrap();
+            collection_files
+                .update_one(
+                    doc! {},
+                    doc! {
+                        "$set": {
+                            "count": 0
+                        }
+                    },
+                    None,
+                )
+                .unwrap();
             file_center.clear_garbage().unwrap();
-            assert!(collection_files.find_one(Some(doc! {
-                "_id": object_id.clone()
-            }), None).unwrap().is_none());
+            assert!(collection_files
+                .find_one(
+                    Some(doc! {
+                        "_id": object_id.clone()
+                    }),
+                    None
+                )
+                .unwrap()
+                .is_none());
             assert_eq!(0, fs_files.count(Some(doc! {}), None).unwrap());
         }
 
@@ -342,9 +391,14 @@ fn clear_garbage() {
             let object_id = file.get_object_id();
             file_center.clear_garbage().unwrap();
             assert_eq!(1, fs_files.count(Some(doc! {}), None).unwrap());
-            collection_files.delete_one(doc! {
-                "_id": object_id.clone()
-            }, None).unwrap();
+            collection_files
+                .delete_one(
+                    doc! {
+                        "_id": object_id.clone()
+                    },
+                    None,
+                )
+                .unwrap();
             file_center.clear_garbage().unwrap();
             assert_eq!(0, fs_files.count(Some(doc! {}), None).unwrap());
         }
