@@ -88,6 +88,8 @@ use short_crypt::ShortCrypt;
 
 use sha3::{Digest, Sha3_256};
 
+use std::error::Error;
+use std::fmt::{Display, Error as FmtError, Formatter};
 use std::fs::File;
 use std::io::{self, Read, Write};
 use std::mem::transmute;
@@ -184,6 +186,34 @@ pub enum FileCenterError {
     IOError(io::Error),
     MimeTypeError,
 }
+
+impl Display for FileCenterError {
+    #[inline]
+    fn fmt(&self, f: &mut Formatter) -> Result<(), FmtError> {
+        match self {
+            FileCenterError::MongoDBError(err) => Display::fmt(err, f),
+            FileCenterError::DocumentError(err) => Display::fmt(err, f),
+            FileCenterError::IDTokenError(err) => f.write_str(err),
+            FileCenterError::FileSizeThresholdError => {
+                f.write_str("The file size threshold is incorrect.")
+            }
+            FileCenterError::VersionError => f.write_str("The version is incorrect."),
+            FileCenterError::DatabaseTooNewError {
+                supported_latest,
+                current,
+            } => {
+                f.write_fmt(format_args!(
+                    "The current database version is {}, but this library only supports to {}.",
+                    current, supported_latest
+                ))
+            }
+            FileCenterError::IOError(err) => Display::fmt(err, f),
+            FileCenterError::MimeTypeError => f.write_str("The mime type is incorrect."),
+        }
+    }
+}
+
+impl Error for FileCenterError {}
 
 impl From<mongodb::Error> for FileCenterError {
     #[inline]
@@ -1007,7 +1037,7 @@ impl FileCenter {
             drop(store_file);
 
             file_item_raw.insert("file_name", file_name);
-            file_item_raw.insert("file_id", id.clone());
+            file_item_raw.insert("file_id", id);
             drop(file);
         } else {
             let mut file_data = Vec::new();
@@ -1085,7 +1115,7 @@ impl FileCenter {
             drop(store_file);
 
             file_item_raw.insert("file_name", file_name);
-            file_item_raw.insert("file_id", id.clone());
+            file_item_raw.insert("file_id", id);
         } else {
             file_item_raw.insert("file_name", file_name);
             file_item_raw.insert("file_data", Bson::Binary(BinarySubtype::Generic, buffer));
@@ -1187,7 +1217,7 @@ impl FileCenter {
                 "hash_4": hash_4,
                 "file_name": file_name,
                 "file_size": file_size as u64,
-                "file_id": id.clone(),
+                "file_id": id,
                 "count": 1i32
             };
 
