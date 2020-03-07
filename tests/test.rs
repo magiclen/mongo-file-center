@@ -13,8 +13,7 @@ use mongo_file_center::{
     FileCenter, FileData,
 };
 
-const HOST: &str = "localhost";
-const PORT: u16 = 27017;
+const URI: &str = "mongodb://localhost:27017";
 
 #[cfg(windows)]
 const FILE_PATH: &str = r"tests\data\image.jpg";
@@ -28,10 +27,10 @@ const SIZE_THRESHOLD: i32 = 10 * 1024 * 1024;
 fn initialize() {
     let database = "test_initialize";
     {
-        FileCenter::new(HOST, PORT, database).unwrap();
+        FileCenter::new(URI, database).unwrap();
     }
     {
-        FileCenter::new(HOST, PORT, database).unwrap().drop_database().unwrap();
+        FileCenter::new(URI, database).unwrap().drop_database().unwrap();
     }
 }
 
@@ -39,7 +38,7 @@ fn initialize() {
 fn crypt() {
     let database = "test_crypt";
 
-    let file_center = FileCenter::new(HOST, PORT, database).unwrap();
+    let file_center = FileCenter::new(URI, database).unwrap();
 
     let oid = ObjectId::new().unwrap();
 
@@ -62,7 +61,7 @@ fn crypt() {
 fn input_output_collection() {
     let database = "test_input_output_collection";
 
-    let mut file_center = FileCenter::new(HOST, PORT, database).unwrap();
+    let mut file_center = FileCenter::new(URI, database).unwrap();
 
     file_center.set_file_size_threshold(SIZE_THRESHOLD).unwrap();
 
@@ -103,7 +102,7 @@ fn input_output_collection() {
 fn input_output_gridfs() {
     let database = "test_input_output_gridfs";
 
-    let file_center = FileCenter::new(HOST, PORT, database).unwrap();
+    let file_center = FileCenter::new(URI, database).unwrap();
 
     let file =
         file_center.put_file_by_path(FILE_PATH, None::<String>, Some(mime::IMAGE_JPEG)).unwrap();
@@ -148,7 +147,7 @@ fn delete_collection() {
     let database = "test_delete_collection";
 
     let file_center =
-        FileCenter::new_with_file_size_threshold(HOST, PORT, database, SIZE_THRESHOLD).unwrap();
+        FileCenter::new_with_file_size_threshold(URI, database, SIZE_THRESHOLD).unwrap();
 
     let file = file_center.put_file_by_path(FILE_PATH, None::<String>, None).unwrap();
 
@@ -188,7 +187,7 @@ fn delete_collection() {
 fn delete_gridfs() {
     let database = "test_delete_gridfs";
 
-    let file_center = FileCenter::new(HOST, PORT, database).unwrap();
+    let file_center = FileCenter::new(URI, database).unwrap();
 
     let file =
         file_center.put_file_by_path(FILE_PATH, None::<String>, Some(mime::IMAGE_JPEG)).unwrap();
@@ -234,7 +233,7 @@ fn delete_gridfs() {
 fn input_output_collection_temporarily() {
     let database = "test_input_output_collection_temporarily";
 
-    let mut file_center = FileCenter::new(HOST, PORT, database).unwrap();
+    let mut file_center = FileCenter::new(URI, database).unwrap();
 
     file_center.set_file_size_threshold(SIZE_THRESHOLD).unwrap();
 
@@ -273,7 +272,7 @@ fn input_output_collection_temporarily() {
 fn input_output_gridfs_temporarily() {
     let database = "test_input_output_gridfs_temporarily";
 
-    let file_center = FileCenter::new(HOST, PORT, database).unwrap();
+    let file_center = FileCenter::new(URI, database).unwrap();
 
     let file = file_center.put_file_by_path_temporarily(FILE_PATH, None::<String>, None).unwrap();
     let file_2 =
@@ -313,7 +312,7 @@ fn input_output_gridfs_temporarily() {
 #[test]
 fn clear_garbage() {
     let database = "test_clear_garbage";
-    let file_center = FileCenter::new(HOST, PORT, database).unwrap();
+    let file_center = FileCenter::new(URI, database).unwrap();
 
     {
         let db = file_center.get_mongo_client_db();

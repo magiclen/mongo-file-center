@@ -238,18 +238,16 @@ impl From<io::Error> for FileCenterError {
 
 impl FileCenter {
     /// Create a new FileCenter instance.
-    pub fn new<H: AsRef<str>, D: AsRef<str>>(
-        host: H,
-        port: u16,
+    pub fn new<U: AsRef<str>, D: AsRef<str>>(
+        uri: U,
         database: D,
     ) -> Result<FileCenter, FileCenterError> {
-        Self::new_with_file_size_threshold_inner(host, port, database, DEFAULT_FILE_SIZE_THRESHOLD)
+        Self::new_with_file_size_threshold_inner(uri, database, DEFAULT_FILE_SIZE_THRESHOLD)
     }
 
     /// Create a new FileCenter instance with a custom initial file size threshold.
-    pub fn new_with_file_size_threshold<H: AsRef<str>, D: AsRef<str>>(
-        host: H,
-        port: u16,
+    pub fn new_with_file_size_threshold<U: AsRef<str>, D: AsRef<str>>(
+        uri: U,
         database: D,
         initial_file_size_threshold: i32,
     ) -> Result<FileCenter, FileCenterError> {
@@ -258,16 +256,15 @@ impl FileCenter {
             return Err(FileCenterError::FileSizeThresholdError);
         }
 
-        Self::new_with_file_size_threshold_inner(host, port, database, initial_file_size_threshold)
+        Self::new_with_file_size_threshold_inner(uri, database, initial_file_size_threshold)
     }
 
-    fn new_with_file_size_threshold_inner<H: AsRef<str>, D: AsRef<str>>(
-        host: H,
-        port: u16,
+    fn new_with_file_size_threshold_inner<U: AsRef<str>, D: AsRef<str>>(
+        uri: U,
         database: D,
         initial_file_size_threshold: i32,
     ) -> Result<FileCenter, FileCenterError> {
-        let mongodb_client = Client::connect(host.as_ref(), port)?;
+        let mongodb_client = Client::with_uri(uri.as_ref())?;
 
         let mongo_client_db = mongodb_client.db(database.as_ref());
 
