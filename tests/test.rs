@@ -25,20 +25,20 @@ const SIZE_THRESHOLD: i32 = 10 * 1024 * 1024;
 
 #[test]
 fn initialize() {
-    let database = "test_initialize";
+    let uri = format!("{}/test_initialize", URI);
     {
-        FileCenter::new(URI, database).unwrap();
+        FileCenter::new(&uri).unwrap();
     }
     {
-        FileCenter::new(URI, database).unwrap().drop_database().unwrap();
+        FileCenter::new(uri).unwrap().drop_database().unwrap();
     }
 }
 
 #[test]
 fn crypt() {
-    let database = "test_crypt";
+    let uri = format!("{}/test_crypt", URI);
 
-    let file_center = FileCenter::new(URI, database).unwrap();
+    let file_center = FileCenter::new(uri).unwrap();
 
     let oid = ObjectId::new().unwrap();
 
@@ -59,9 +59,9 @@ fn crypt() {
 
 #[test]
 fn input_output_collection() {
-    let database = "test_input_output_collection";
+    let uri = format!("{}/test_input_output_collection", URI);
 
-    let mut file_center = FileCenter::new(URI, database).unwrap();
+    let mut file_center = FileCenter::new(uri).unwrap();
 
     file_center.set_file_size_threshold(SIZE_THRESHOLD).unwrap();
 
@@ -100,9 +100,9 @@ fn input_output_collection() {
 
 #[test]
 fn input_output_gridfs() {
-    let database = "test_input_output_gridfs";
+    let uri = format!("{}/test_input_output_gridfs", URI);
 
-    let file_center = FileCenter::new(URI, database).unwrap();
+    let file_center = FileCenter::new(uri).unwrap();
 
     let file =
         file_center.put_file_by_path(FILE_PATH, None::<String>, Some(mime::IMAGE_JPEG)).unwrap();
@@ -144,10 +144,9 @@ fn input_output_gridfs() {
 
 #[test]
 fn delete_collection() {
-    let database = "test_delete_collection";
+    let uri = format!("{}/test_delete_collection", URI);
 
-    let file_center =
-        FileCenter::new_with_file_size_threshold(URI, database, SIZE_THRESHOLD).unwrap();
+    let file_center = FileCenter::new_with_file_size_threshold(uri, SIZE_THRESHOLD).unwrap();
 
     let file = file_center.put_file_by_path(FILE_PATH, None::<String>, None).unwrap();
 
@@ -185,9 +184,9 @@ fn delete_collection() {
 
 #[test]
 fn delete_gridfs() {
-    let database = "test_delete_gridfs";
+    let uri = format!("{}/test_delete_gridfs", URI);
 
-    let file_center = FileCenter::new(URI, database).unwrap();
+    let file_center = FileCenter::new(uri).unwrap();
 
     let file =
         file_center.put_file_by_path(FILE_PATH, None::<String>, Some(mime::IMAGE_JPEG)).unwrap();
@@ -231,9 +230,9 @@ fn delete_gridfs() {
 
 #[test]
 fn input_output_collection_temporarily() {
-    let database = "test_input_output_collection_temporarily";
+    let uri = format!("{}/test_input_output_collection_temporarily", URI);
 
-    let mut file_center = FileCenter::new(URI, database).unwrap();
+    let mut file_center = FileCenter::new(uri).unwrap();
 
     file_center.set_file_size_threshold(SIZE_THRESHOLD).unwrap();
 
@@ -270,9 +269,9 @@ fn input_output_collection_temporarily() {
 
 #[test]
 fn input_output_gridfs_temporarily() {
-    let database = "test_input_output_gridfs_temporarily";
+    let uri = format!("{}/test_input_output_gridfs_temporarily", URI);
 
-    let file_center = FileCenter::new(URI, database).unwrap();
+    let file_center = FileCenter::new(uri).unwrap();
 
     let file = file_center.put_file_by_path_temporarily(FILE_PATH, None::<String>, None).unwrap();
     let file_2 =
@@ -311,8 +310,8 @@ fn input_output_gridfs_temporarily() {
 
 #[test]
 fn clear_garbage() {
-    let database = "test_clear_garbage";
-    let file_center = FileCenter::new(URI, database).unwrap();
+    let uri = format!("{}/test_clear_garbage", URI);
+    let file_center = FileCenter::new(uri).unwrap();
 
     {
         let db = file_center.get_mongo_client_db();

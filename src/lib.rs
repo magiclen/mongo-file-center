@@ -70,6 +70,7 @@ use mongodb::coll::{
     options::{FindOneAndUpdateOptions, FindOptions, IndexOptions, ReturnDocument, UpdateOptions},
     Collection,
 };
+use mongodb::connstring;
 use mongodb::db::{Database, ThreadedDatabase};
 use mongodb::gridfs::{self, Store, ThreadedStore};
 use mongodb::{Client, ThreadedClient};
@@ -238,17 +239,13 @@ impl From<io::Error> for FileCenterError {
 
 impl FileCenter {
     /// Create a new FileCenter instance.
-    pub fn new<U: AsRef<str>, D: AsRef<str>>(
-        uri: U,
-        database: D,
-    ) -> Result<FileCenter, FileCenterError> {
-        Self::new_with_file_size_threshold_inner(uri, database, DEFAULT_FILE_SIZE_THRESHOLD)
+    pub fn new<U: AsRef<str>>(uri: U) -> Result<FileCenter, FileCenterError> {
+        Self::new_with_file_size_threshold_inner(uri, DEFAULT_FILE_SIZE_THRESHOLD)
     }
 
     /// Create a new FileCenter instance with a custom initial file size threshold.
-    pub fn new_with_file_size_threshold<U: AsRef<str>, D: AsRef<str>>(
+    pub fn new_with_file_size_threshold<U: AsRef<str>>(
         uri: U,
-        database: D,
         initial_file_size_threshold: i32,
     ) -> Result<FileCenter, FileCenterError> {
         if initial_file_size_threshold > MAX_FILE_SIZE_THRESHOLD || initial_file_size_threshold <= 0
@@ -256,17 +253,26 @@ impl FileCenter {
             return Err(FileCenterError::FileSizeThresholdError);
         }
 
-        Self::new_with_file_size_threshold_inner(uri, database, initial_file_size_threshold)
+        Self::new_with_file_size_threshold_inner(uri, initial_file_size_threshold)
     }
 
-    fn new_with_file_size_threshold_inner<U: AsRef<str>, D: AsRef<str>>(
+    fn new_with_file_size_threshold_inner<U: AsRef<str>>(
         uri: U,
-        database: D,
         initial_file_size_threshold: i32,
     ) -> Result<FileCenter, FileCenterError> {
+        let uri = uri.as_ref();
+
+        let config = connstring::parse(uri)?;
+
+        let database = config.database.ok_or_else(|| {
+            FileCenterError::MongoDBError(mongodb::Error::ArgumentError(String::from(
+                "Uri doesn't contain a database name.",
+            )))
+        })?;
+
         let mongodb_client = Client::with_uri(uri.as_ref())?;
 
-        let mongo_client_db = mongodb_client.db(database.as_ref());
+        let mongo_client_db = mongodb_client.db(&database);
 
         let file_size_threshold;
         let create_time;
