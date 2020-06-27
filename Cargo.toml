@@ -18,7 +18,7 @@ branch = "master"
 
 [dependencies]
 mongodb = "0.4"
-bson = "0.14"
+bson = "=0.14.0"
 short-crypt = "1.0.7"
 lazy_static = "1.1.0"
 chrono = "0.4.6"
