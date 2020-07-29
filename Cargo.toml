@@ -1,16 +1,16 @@
 [package]
 name = "mongo-file-center"
-version = "0.4.1"
+version = "0.4.2"
 authors = ["Magic Len <len@magiclen.org>"]
 edition = "2018"
 repository = "https://github.com/magiclen/mongo-file-center"
 homepage = "https://magiclen.org/mongo-file-center"
 keywords = ["mongodb", "storage", "file"]
 categories = ["filesystem", "database"]
-description= "To store perennial files and temporary files in MongoDB."
+description = "To store perennial files and temporary files in MongoDB."
 readme = "README.md"
 license = "MIT"
-include = ["src/**/*", "Cargo.toml"]
+include = ["src/**/*", "Cargo.toml", "README.md", "LICENSE"]
 
 [badges.travis-ci]
 repository = "magiclen/mongo-file-center"
