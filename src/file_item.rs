@@ -1,10 +1,11 @@
-use crate::FileData;
-
-use bson::oid::ObjectId;
-
-use mime::Mime;
+extern crate chrono;
 
 use chrono::prelude::*;
+
+use crate::mime::Mime;
+use crate::mongodb_cwal::oid::ObjectId;
+
+use crate::FileData;
 
 /// To represent the file retrieved from MongoDB.
 #[derive(Debug)]

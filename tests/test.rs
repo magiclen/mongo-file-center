@@ -1,25 +1,19 @@
-extern crate mongo_file_center;
 #[macro_use]
-extern crate bson;
-extern crate mime;
+extern crate mongo_file_center;
+
+#[macro_use]
+extern crate slash_formatter;
 
 use std::fs::{self, File};
 use std::io::Read;
 
-use bson::oid::ObjectId;
-
-use mongo_file_center::{
-    mongodb::{coll::Collection, db::ThreadedDatabase},
-    FileCenter, FileData,
-};
+use mongo_file_center::mongodb_cwal::db::ThreadedDatabase;
+use mongo_file_center::mongodb_cwal::oid::ObjectId;
+use mongo_file_center::{FileCenter, FileData};
 
 const URI: &str = "mongodb://localhost:27017";
 
-#[cfg(windows)]
-const FILE_PATH: &str = r"tests\data\image.jpg";
-
-#[cfg(not(windows))]
-const FILE_PATH: &str = "tests/data/image.jpg";
+const FILE_PATH: &str = concat_with_file_separator!("tests", "data", "image.jpg");
 
 const SIZE_THRESHOLD: i32 = 10 * 1024 * 1024;
 
@@ -74,7 +68,7 @@ fn input_output_collection() {
         assert_eq!(file.get_object_id(), file_2.get_object_id());
 
         let file_3 = file_center
-            .put_file_by_buffer(file_2.into_file_data().into_vec_unchecked(), "", None)
+            .put_file_by_buffer(file_2.into_file_data().into_vec().unwrap(), "", None)
             .unwrap();
 
         assert_eq!(file.get_object_id(), file_3.get_object_id());
@@ -114,7 +108,7 @@ fn input_output_gridfs() {
         assert_eq!(file.get_object_id(), file_2.get_object_id());
 
         let file_3 = file_center
-            .put_file_by_buffer(file_2.into_file_data().into_vec_unchecked(), "", None)
+            .put_file_by_buffer(file_2.into_file_data().into_vec().unwrap(), "", None)
             .unwrap();
 
         assert_eq!(file.get_object_id(), file_3.get_object_id());
@@ -314,9 +308,9 @@ fn clear_garbage() {
     let file_center = FileCenter::new(uri).unwrap();
 
     {
-        let db = file_center.get_mongo_client_db();
-        let fs_files: Collection = db.collection("fs.files");
-        let collection_files: Collection = db.collection(mongo_file_center::COLLECTION_FILES_NAME);
+        let db = file_center.database_r2d2().unwrap();
+        let fs_files = db.collection("fs.files");
+        let collection_files = db.collection(mongo_file_center::COLLECTION_FILES_NAME);
 
         // unnecessary file items which have file_id but the target file does not exist
         {
