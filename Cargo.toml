@@ -25,4 +25,4 @@ mongodb_cwal = "0.6.7"
 bson = "0.14"
 
 [dev-dependencies]
-slash-formatter = "3.1.2"
+manifest-dir-macros = "0.1"

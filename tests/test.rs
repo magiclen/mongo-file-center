@@ -2,7 +2,7 @@
 extern crate mongo_file_center;
 
 #[macro_use]
-extern crate slash_formatter;
+extern crate manifest_dir_macros;
 
 use std::fs::{self, File};
 use std::io::Read;
@@ -13,7 +13,7 @@ use mongo_file_center::{FileCenter, FileData};
 
 const URI: &str = "mongodb://localhost:27017";
 
-const FILE_PATH: &str = concat_with_file_separator!("tests", "data", "image.jpg");
+const FILE_PATH: &str = file_path!("tests/data/image.jpg");
 
 const SIZE_THRESHOLD: i32 = 10 * 1024 * 1024;
 
