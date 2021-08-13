@@ -11,7 +11,7 @@ use mongo_file_center::mongodb_cwal::db::ThreadedDatabase;
 use mongo_file_center::mongodb_cwal::oid::ObjectId;
 use mongo_file_center::{FileCenter, FileData};
 
-const URI: &str = "mongodb://localhost:27017";
+const URI: &str = "mongodb://192.168.100.101:27017";
 
 const FILE_PATH: &str = file_path!("tests/data/image.jpg");
 

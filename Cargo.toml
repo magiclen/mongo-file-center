@@ -21,7 +21,7 @@ mime_guess = "2"
 rand = "0.8"
 
 r2d2 = "0.8"
-mongodb_cwal = "0.6.7"
+mongodb_cwal = { git = "https://github.com/magiclen/old-mongo-rust-driver" }
 bson = "0.14"
 
 [dev-dependencies]
