@@ -1,61 +1,60 @@
-extern crate rand;
-extern crate sha3;
-
-use std::fs::File;
-use std::io::{self, Read};
 use std::mem::transmute;
 use std::path::Path;
 
-use rand::Rng;
-use sha3::{Digest, Sha3_256};
+use crate::tokio::fs::File;
+use crate::tokio::io::{self, AsyncReadExt};
 
-use crate::BUFFER_SIZE;
+use crate::mime::Mime;
 
-pub(crate) fn get_hash_by_path<P: AsRef<Path>>(
+use crate::{Digest, Hasher, DEFAULT_MIME_TYPE};
+
+const BUFFER_SIZE: usize = 4096;
+
+pub(crate) fn get_mime_by_path<P: AsRef<Path>>(file_path: P) -> Mime {
+    match file_path.as_ref().extension() {
+        Some(extension) => {
+            mime_guess::from_ext(extension.to_str().unwrap()).first_or_octet_stream()
+        }
+        None => DEFAULT_MIME_TYPE,
+    }
+}
+
+pub(crate) async fn get_hash_by_path<P: AsRef<Path>>(
     file_path: P,
 ) -> Result<(i64, i64, i64, i64), io::Error> {
     let file_path = file_path.as_ref();
 
-    let mut file = File::open(file_path)?;
+    let mut file = File::open(file_path).await?;
 
-    let mut sha3_256 = Sha3_256::new();
+    let mut hasher = Hasher::new();
 
-    let mut buffer = [0u8; BUFFER_SIZE];
+    let mut buffer = [0; BUFFER_SIZE];
 
     loop {
-        let c = file.read(&mut buffer)?;
+        let c = file.read(&mut buffer).await?;
 
         if c == 0 {
             break;
         }
 
-        sha3_256.update(&buffer[..c]);
+        hasher.update(&buffer[..c]);
     }
 
-    let result = sha3_256.finalize();
+    let result = hasher.finalize();
 
     Ok(separate_hash(&result))
 }
 
-pub(crate) fn get_hash_by_buffer<P: AsRef<[u8]>>(
-    buffer: P,
-) -> Result<(i64, i64, i64, i64), io::Error> {
+pub(crate) fn get_hash_by_buffer<P: AsRef<[u8]>>(buffer: P) -> (i64, i64, i64, i64) {
     let buffer = buffer.as_ref();
 
-    let mut sha3_256 = Sha3_256::new();
+    let mut hasher = Hasher::new();
 
-    sha3_256.update(buffer);
+    hasher.update(buffer);
 
-    let result = sha3_256.finalize();
+    let result = hasher.finalize();
 
-    Ok(separate_hash(&result))
-}
-
-#[inline]
-pub(crate) fn get_hash_by_random() -> (i64, i64, i64, i64) {
-    let mut rng = rand::thread_rng();
-
-    (rng.gen(), rng.gen(), rng.gen(), rng.gen())
+    separate_hash(&result)
 }
 
 pub(crate) fn separate_hash(hash: &[u8]) -> (i64, i64, i64, i64) {

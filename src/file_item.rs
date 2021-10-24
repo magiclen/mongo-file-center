@@ -1,35 +1,38 @@
-extern crate chrono;
+use std::io::{self, Cursor};
 
-use chrono::prelude::*;
+use crate::bson::oid::ObjectId;
+use crate::bson::DateTime;
+
+use crate::tokio_stream::Stream;
 
 use crate::mime::Mime;
-use crate::mongodb_cwal::oid::ObjectId;
 
 use crate::FileData;
 
 /// To represent the file retrieved from MongoDB.
-#[derive(Debug)]
-pub struct FileItem {
-    pub(crate) id: ObjectId,
-    pub(crate) create_time: DateTime<Utc>,
-    pub(crate) expire_at: Option<DateTime<Utc>>,
+#[derive(Educe)]
+#[educe(Debug)]
+pub struct FileItem<T: Stream<Item = Result<Cursor<Vec<u8>>, io::Error>> + Unpin> {
+    pub(crate) file_id: ObjectId,
+    pub(crate) create_time: DateTime,
+    pub(crate) expire_at: Option<DateTime>,
     pub(crate) mime_type: Mime,
     pub(crate) file_size: u64,
     pub(crate) file_name: String,
-    pub(crate) file_data: FileData,
+    pub(crate) file_data: FileData<T>,
 }
 
-impl FileItem {
-    pub fn get_object_id(&self) -> &ObjectId {
-        &self.id
+impl<T: Stream<Item = Result<Cursor<Vec<u8>>, io::Error>> + Unpin> FileItem<T> {
+    pub fn get_file_id(&self) -> ObjectId {
+        self.file_id
     }
 
-    pub fn get_create_time(&self) -> &DateTime<Utc> {
-        &self.create_time
+    pub fn get_create_time(&self) -> DateTime {
+        self.create_time
     }
 
-    pub fn get_expiration_time(&self) -> Option<&DateTime<Utc>> {
-        self.expire_at.as_ref()
+    pub fn get_expiration_time(&self) -> Option<DateTime> {
+        self.expire_at
     }
 
     pub fn get_mime_type(&self) -> &Mime {
@@ -44,7 +47,7 @@ impl FileItem {
         &self.file_name
     }
 
-    pub fn into_file_data(self) -> FileData {
+    pub fn into_file_data(self) -> FileData<T> {
         self.file_data
     }
 }

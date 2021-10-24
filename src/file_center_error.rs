@@ -1,18 +1,11 @@
-extern crate r2d2;
-
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
 use std::io;
 
-use crate::bson;
-use crate::mongodb_cwal;
-
 #[derive(Debug)]
 pub enum FileCenterError {
-    R2D2Error(r2d2::Error),
-    MongoDBError(mongodb_cwal::Error),
-    DocumentError(bson::ValueAccessError),
-    IDTokenError(&'static str),
+    MongoDBError(crate::mongodb::error::Error),
+    DocumentError(crate::bson::document::ValueAccessError),
     FileSizeThresholdError,
     VersionError,
     DatabaseTooNewError {
@@ -20,17 +13,15 @@ pub enum FileCenterError {
         current: i32,
     },
     IOError(io::Error),
-    MimeTypeError,
+    IDTokenError(&'static str),
 }
 
 impl Display for FileCenterError {
     #[inline]
     fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
         match self {
-            FileCenterError::R2D2Error(err) => Display::fmt(err, f),
             FileCenterError::MongoDBError(err) => Display::fmt(err, f),
             FileCenterError::DocumentError(err) => Display::fmt(err, f),
-            FileCenterError::IDTokenError(err) => f.write_str(err),
             FileCenterError::FileSizeThresholdError => {
                 f.write_str("the file size threshold is incorrect")
             }
@@ -45,30 +36,23 @@ impl Display for FileCenterError {
                 ))
             }
             FileCenterError::IOError(err) => Display::fmt(err, f),
-            FileCenterError::MimeTypeError => f.write_str("the mime type is incorrect"),
+            FileCenterError::IDTokenError(err) => f.write_str(err),
         }
     }
 }
 
 impl Error for FileCenterError {}
 
-impl From<r2d2::Error> for FileCenterError {
+impl From<crate::mongodb::error::Error> for FileCenterError {
     #[inline]
-    fn from(err: r2d2::Error) -> Self {
-        FileCenterError::R2D2Error(err)
-    }
-}
-
-impl From<mongodb_cwal::Error> for FileCenterError {
-    #[inline]
-    fn from(err: mongodb_cwal::Error) -> Self {
+    fn from(err: crate::mongodb::error::Error) -> Self {
         FileCenterError::MongoDBError(err)
     }
 }
 
-impl From<bson::ValueAccessError> for FileCenterError {
+impl From<crate::bson::document::ValueAccessError> for FileCenterError {
     #[inline]
-    fn from(err: bson::ValueAccessError) -> Self {
+    fn from(err: crate::bson::document::ValueAccessError) -> Self {
         FileCenterError::DocumentError(err)
     }
 }
