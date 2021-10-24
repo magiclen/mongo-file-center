@@ -43,7 +43,6 @@ match r_file.into_file_data() {
 ## Migration Limitation
 
 The old file center should not be migrated to the file center 0.6+ because the structure and the hash algorithm have been changed extremely. You will need a lot of effort to do that by yourself.
-```
  */
 
 pub extern crate tokio;
