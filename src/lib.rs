@@ -20,9 +20,7 @@ const mongodb_uri: &str = "mongodb://localhost:27017/test_my_file_storage";
 
 let file_center = FileCenter::new(mongodb_uri).await.unwrap();
 
-let file = file_center.put_file_by_path("/path/to/file", Some("file_name"), Some(mime::IMAGE_JPEG)).await.unwrap();
-
-let file_id = file.get_object_id();
+let file_id = file_center.put_file_by_path("/path/to/file", Some("file_name"), Some(mime::IMAGE_JPEG)).await.unwrap();
 
 let id_token = file_center.encrypt_id(file_id); // this token is safe in public
 

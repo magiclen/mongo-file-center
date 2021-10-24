@@ -5,12 +5,12 @@ use crate::tokio_stream::{Stream, StreamExt};
 /// To represent the file data retrieved from MongoDB.
 #[derive(Educe)]
 #[educe(Debug)]
-pub enum FileData<T: Stream<Item = Result<Cursor<Vec<u8>>, io::Error>> + Unpin> {
+pub enum FileData {
     Buffer(Vec<u8>),
-    Stream(#[educe(Debug(ignore))] T),
+    Stream(#[educe(Debug(ignore))] Box<dyn Stream<Item = Result<Cursor<Vec<u8>>, io::Error>> + Unpin + Send>),
 }
 
-impl<T: Stream<Item = Result<Cursor<Vec<u8>>, io::Error>> + Unpin> FileData<T> {
+impl FileData {
     /// Turn into a `Vec<u8>` instance.
     #[inline]
     pub async fn into_vec(self) -> Result<Vec<u8>, io::Error> {

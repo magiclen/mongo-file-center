@@ -520,7 +520,7 @@ impl FileCenter {
         &self,
         mut document: Document,
     ) -> Result<
-        FileItem<impl Stream<Item = Result<Cursor<Vec<u8>>, io::Error>> + Unpin>,
+        FileItem,
         FileCenterError,
     > {
         let file_id = match document
@@ -608,7 +608,7 @@ impl FileCenter {
 
                 let stream = self.open_download_stream(file_id).await?;
 
-                FileData::Stream(stream)
+                FileData::Stream(Box::new(stream))
             }
         };
 
@@ -647,7 +647,7 @@ impl FileCenter {
         &self,
         id: ObjectId,
     ) -> Result<
-        Option<FileItem<impl Stream<Item = Result<Cursor<Vec<u8>>, io::Error>> + Unpin>>,
+        Option<FileItem>,
         FileCenterError,
     > {
         let collection_files = &self.collections.files;
