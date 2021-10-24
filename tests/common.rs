@@ -10,7 +10,8 @@ const HOST_URI: &str = "mongodb://localhost:27017";
 pub const IMAGE_BIG_PATH: &str = manifest_dir_macros::file_path!("tests", "data", "image-big.jpg");
 pub const IMAGE_BIG_SIZE: u64 = 1312391;
 
-pub const IMAGE_SMALL_PATH: &str = manifest_dir_macros::file_path!("tests", "data", "image-small.png");
+pub const IMAGE_SMALL_PATH: &str =
+    manifest_dir_macros::file_path!("tests", "data", "image-small.png");
 pub const IMAGE_SMALL_SIZE: u64 = 11658;
 
 #[inline]
