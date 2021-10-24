@@ -7,7 +7,7 @@ For perennial files, each of them is unique in the database, and can be retrieve
 
 For temporary files, they are allowed to be duplicated, but each instance can be retrieved only one time in a minute after it is created.
 
-The file data can be stored in a document or be separated into chunks to store in multiple documents. It depends on the size of data and the `file_size_threshold`. If the size is smaller than the threshold, it stores in a single document. The max threshold is **16770KB**. The default threshold is **255KiB**.
+The file data can be stored in a document or be separated into chunks to store in multiple documents. It depends on the size of data and the `file_size_threshold`. If the size is smaller than or equal to the threshold, it stores in a single document. The max threshold is **16770KB**. The default threshold is **256KiB**.
 
 ## Example
 

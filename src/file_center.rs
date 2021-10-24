@@ -39,7 +39,7 @@ pub const COLLECTION_FILES_CHUNKS_NAME: &str = "file_center_chunks";
 /// The name of the collection which stores the settings of the file center.
 pub const COLLECTION_SETTINGS_NAME: &str = "file_center_settings";
 
-/// The name of the `file_size_threshold` value. When the file size is bigger than or equal to `file_size_threshold`, it should be separate into chunks to store in the `COLLECTION_FILES_CHUNKS_NAME` collection.
+/// The name of the `file_size_threshold` value. When the file size is bigger than `file_size_threshold`, it should be separate into chunks to store in the `COLLECTION_FILES_CHUNKS_NAME` collection.
 ///
 /// `file_size_threshold` cannot bigger than `16_770_000`.
 pub const SETTING_FILE_SIZE_THRESHOLD: &str = "file_size_threshold";
@@ -51,7 +51,7 @@ pub const SETTING_VERSION: &str = "version";
 #[doc(hidden)]
 pub const MAX_FILE_SIZE_THRESHOLD: u32 = 16_770_000;
 #[doc(hidden)]
-pub const DEFAULT_FILE_SIZE_THRESHOLD: u32 = 261_120;
+pub const DEFAULT_FILE_SIZE_THRESHOLD: u32 = 262_144;
 
 const TEMPORARY_LIFE_TIME: i64 = 60000;
 const TEMPORARY_CHUNK_LIFE_TIME: i64 = 3600000;
@@ -905,7 +905,7 @@ impl FileCenter {
                     "count": 1i32
                 };
 
-                if file_size >= self.file_size_threshold as u64 {
+                if file_size > self.file_size_threshold as u64 {
                     let chunk_id = match self.upload_from_stream(file_id, file).await {
                         Ok(id) => id,
                         Err(err) => {
@@ -977,7 +977,7 @@ impl FileCenter {
             "count": 1i32
         };
 
-        let is_stream = file_size >= self.file_size_threshold as u64;
+        let is_stream = file_size > self.file_size_threshold as u64;
 
         if is_stream {
             let chunk_id = match self.upload_from_stream(file_id, file).await {
@@ -1139,7 +1139,7 @@ impl FileCenter {
                     "count": 1i32
                 };
 
-                if file_size >= self.file_size_threshold as usize {
+                if file_size > self.file_size_threshold as usize {
                     let chunk_id = match self.upload_from_buffer(file_id, &buffer).await {
                         Ok(id) => id,
                         Err(err) => {
@@ -1196,7 +1196,7 @@ impl FileCenter {
             "count": 1i32
         };
 
-        let is_stream = file_size >= self.file_size_threshold as usize;
+        let is_stream = file_size > self.file_size_threshold as usize;
 
         if is_stream {
             let chunk_id = match self.upload_from_buffer(file_id, &buffer).await {

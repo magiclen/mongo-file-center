@@ -21,8 +21,8 @@ async fn threshold() {
 
     let image_small = fs::read(IMAGE_SMALL_PATH).await.unwrap();
 
-    file_center.set_file_size_threshold(261_120).await.unwrap();
-    assert_eq!(261_120, file_center.get_file_size_threshold());
+    file_center.set_file_size_threshold(IMAGE_SMALL_SIZE as u32).await.unwrap();
+    assert_eq!(IMAGE_SMALL_SIZE as u32, file_center.get_file_size_threshold());
 
     {
         let file_id = file_center

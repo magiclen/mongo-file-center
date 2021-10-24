@@ -58,7 +58,7 @@ async fn max_file_size_threshold() {
 
     let file_id = file_center
         .put_file_by_buffer(
-            vec![0; MAX_FILE_SIZE_THRESHOLD as usize - 1],
+            vec![0; MAX_FILE_SIZE_THRESHOLD as usize],
             "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789",
             None,
         )
