@@ -516,13 +516,7 @@ impl FileCenter {
             }))
     }
 
-    async fn create_file_item(
-        &self,
-        mut document: Document,
-    ) -> Result<
-        FileItem,
-        FileCenterError,
-    > {
+    async fn create_file_item(&self, mut document: Document) -> Result<FileItem, FileCenterError> {
         let file_id = match document
             .remove("_id")
             .ok_or(FileCenterError::DocumentError(ValueAccessError::NotPresent))?
@@ -646,10 +640,7 @@ impl FileCenter {
     pub async fn get_file_item_by_id(
         &self,
         id: ObjectId,
-    ) -> Result<
-        Option<FileItem>,
-        FileCenterError,
-    > {
+    ) -> Result<Option<FileItem>, FileCenterError> {
         let collection_files = &self.collections.files;
 
         let mut options = FindOneOptions::default();

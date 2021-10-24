@@ -7,7 +7,10 @@ use crate::tokio_stream::{Stream, StreamExt};
 #[educe(Debug)]
 pub enum FileData {
     Buffer(Vec<u8>),
-    Stream(#[educe(Debug(ignore))] Box<dyn Stream<Item = Result<Cursor<Vec<u8>>, io::Error>> + Unpin + Send>),
+    Stream(
+        #[educe(Debug(ignore))]
+        Box<dyn Stream<Item = Result<Cursor<Vec<u8>>, io::Error>> + Unpin + Send>,
+    ),
 }
 
 impl FileData {
