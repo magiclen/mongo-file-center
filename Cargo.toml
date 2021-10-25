@@ -1,6 +1,7 @@
 [package]
 name = "mongo-file-center"
-version = "0.6.2"
+version = "0.6.3"
+authors = ["Magic Len <len@magiclen.org>"]
 edition = "2021"
 repository = "https://github.com/magiclen/mongo-file-center"
 homepage = "https://magiclen.org/mongo-file-center"
