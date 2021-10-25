@@ -246,6 +246,8 @@ impl FileCenter {
         // TODO in the future, the client_options should have the default_database method
 
         let db_name = {
+            let uri = &uri[(uri.find("://").unwrap() + 3)..];
+
             if let Some(index) = uri.rfind('/') {
                 let start = index + 1;
 
