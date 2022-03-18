@@ -16,7 +16,7 @@ pub const IMAGE_SMALL_SIZE: u64 = 11658;
 
 #[inline]
 pub fn get_mongodb_uri(database_name: &str) -> String {
-    let mut host_uri = env::var("MONGODB_HOST_URI").unwrap_or(HOST_URI.to_string());
+    let mut host_uri = env::var("MONGODB_HOST_URI").unwrap_or_else(|_| HOST_URI.to_string());
 
     slash_formatter::concat_with_slash_in_place(&mut host_uri, database_name);
 
