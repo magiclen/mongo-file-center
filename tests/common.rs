@@ -1,8 +1,5 @@
 #![allow(dead_code)]
 
-extern crate manifest_dir_macros;
-extern crate slash_formatter;
-
 use std::env;
 
 const HOST_URI: &str = "mongodb://localhost:27017";

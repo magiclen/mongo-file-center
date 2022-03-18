@@ -14,8 +14,6 @@ The file data can be stored in a document or be separated into chunks to store i
 ## Example
 
 ```rust,ignore
-extern crate mongo_file_center;
-
 use mongo_file_center::{FileCenter, FileData, mime};
 
 const mongodb_uri: &str = "mongodb://localhost:27017/test_my_file_storage";

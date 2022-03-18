@@ -1,5 +1,3 @@
-extern crate short_crypt;
-
 use std::io::{self, Cursor, ErrorKind};
 use std::path::Path;
 use std::str::FromStr;

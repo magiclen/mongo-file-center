@@ -1,10 +1,3 @@
-extern crate tokio;
-extern crate tokio_util;
-
-extern crate mongo_file_center;
-
-extern crate same_content;
-
 mod common;
 
 use tokio::fs::{self, File};
