@@ -381,8 +381,7 @@ impl FileCenter {
             };
         }
 
-        let short_crypt =
-            ShortCrypt::new(&format!("FileCenter-{}", create_time.timestamp_millis()));
+        let short_crypt = ShortCrypt::new(format!("FileCenter-{}", create_time.timestamp_millis()));
 
         let file_center = FileCenter {
             db,
