@@ -1,6 +1,8 @@
-use std::error::Error;
-use std::fmt::{self, Display, Formatter};
-use std::io;
+use std::{
+    error::Error,
+    fmt::{self, Display, Formatter},
+    io,
+};
 
 #[derive(Debug)]
 pub enum FileCenterError {
@@ -8,10 +10,7 @@ pub enum FileCenterError {
     DocumentError(crate::bson::document::ValueAccessError),
     FileSizeThresholdError,
     VersionError,
-    DatabaseTooNewError {
-        supported_latest: i32,
-        current: i32,
-    },
+    DatabaseTooNewError { supported_latest: i32, current: i32 },
     IOError(io::Error),
     IDTokenError(&'static str),
 }
@@ -24,17 +23,15 @@ impl Display for FileCenterError {
             FileCenterError::DocumentError(err) => Display::fmt(err, f),
             FileCenterError::FileSizeThresholdError => {
                 f.write_str("the file size threshold is incorrect")
-            }
+            },
             FileCenterError::VersionError => f.write_str("the version is incorrect"),
             FileCenterError::DatabaseTooNewError {
                 supported_latest,
                 current,
-            } => {
-                f.write_fmt(format_args!(
-                    "the current database version is {}, but this library only supports to {}",
-                    current, supported_latest
-                ))
-            }
+            } => f.write_fmt(format_args!(
+                "the current database version is {}, but this library only supports to {}",
+                current, supported_latest
+            )),
             FileCenterError::IOError(err) => Display::fmt(err, f),
             FileCenterError::IDTokenError(err) => f.write_str(err),
         }

@@ -1,31 +1,36 @@
-use std::io::{self, Cursor, ErrorKind};
-use std::path::Path;
-use std::str::FromStr;
-use std::time::Duration;
-
-use crate::tokio::fs::File;
-
-use crate::tokio::io::{AsyncRead, AsyncReadExt};
-use crate::tokio_stream::{Stream, StreamExt};
-
-use crate::bson::document::{Document, ValueAccessError};
-use crate::bson::oid::ObjectId;
-use crate::bson::spec::BinarySubtype;
-use crate::bson::{Binary, Bson, DateTime};
-
-use crate::mongodb::options::{
-    ClientOptions, FindOneAndUpdateOptions, FindOneOptions, FindOptions, IndexOptions,
-    ReturnDocument, UpdateOptions,
+use std::{
+    io::{self, Cursor, ErrorKind},
+    path::Path,
+    str::FromStr,
+    time::Duration,
 };
-use crate::mongodb::results::DeleteResult;
-use crate::mongodb::{Client, Collection, Database, IndexModel};
-
-use crate::mime::Mime;
-
-use crate::functions::*;
-use crate::{Digest, FileCenterError, FileData, FileItem, Hasher, IDToken, DEFAULT_MIME_TYPE};
 
 use short_crypt::ShortCrypt;
+
+use crate::{
+    bson::{
+        document::{Document, ValueAccessError},
+        oid::ObjectId,
+        spec::BinarySubtype,
+        Binary, Bson, DateTime,
+    },
+    functions::*,
+    mime::Mime,
+    mongodb::{
+        options::{
+            ClientOptions, FindOneAndUpdateOptions, FindOneOptions, FindOptions, IndexOptions,
+            ReturnDocument, UpdateOptions,
+        },
+        results::DeleteResult,
+        Client, Collection, Database, IndexModel,
+    },
+    tokio::{
+        fs::File,
+        io::{AsyncRead, AsyncReadExt},
+    },
+    tokio_stream::{Stream, StreamExt},
+    Digest, FileCenterError, FileData, FileItem, Hasher, IDToken, DEFAULT_MIME_TYPE,
+};
 
 /// The default database name, if there is no database name in the MongoDB URI.
 pub const DEFAULT_DATABASE_NAME: &str = "test";
@@ -98,20 +103,20 @@ fn chunk_document(file_id: ObjectId, n: i64, bytes: Vec<u8>) -> Document {
 
 #[derive(Debug)]
 struct FileCenterCollections {
-    files: Collection<Document>,
+    files:        Collection<Document>,
     files_chunks: Collection<Document>,
-    settings: Collection<Document>,
+    settings:     Collection<Document>,
 }
 
 /// To store perennial files and temporary files in MongoDB.
 #[derive(Debug)]
 pub struct FileCenter {
-    db: Database,
-    collections: FileCenterCollections,
+    db:                  Database,
+    collections:         FileCenterCollections,
     file_size_threshold: u32,
-    _create_time: DateTime,
-    _version: i32,
-    short_crypt: ShortCrypt,
+    _create_time:        DateTime,
+    _version:            i32,
+    short_crypt:         ShortCrypt,
 }
 
 impl FileCenter {
@@ -297,7 +302,7 @@ impl FileCenter {
                     }
 
                     file_size_threshold
-                }
+                },
                 None => {
                     collection_settings
                         .insert_one(
@@ -310,7 +315,7 @@ impl FileCenter {
                         .await?;
 
                     initial_file_size_threshold
-                }
+                },
             };
 
             create_time = match collection_settings
@@ -337,7 +342,7 @@ impl FileCenter {
                         .await?;
 
                     now
-                }
+                },
             };
 
             version = match collection_settings
@@ -359,12 +364,12 @@ impl FileCenter {
                     if version > VERSION {
                         return Err(FileCenterError::DatabaseTooNewError {
                             supported_latest: VERSION,
-                            current: version,
+                            current:          version,
                         });
                     }
 
                     version
-                }
+                },
                 None => {
                     collection_settings
                         .insert_one(
@@ -377,7 +382,7 @@ impl FileCenter {
                         .await?;
 
                     VERSION
-                }
+                },
             };
         }
 
@@ -386,9 +391,9 @@ impl FileCenter {
         let file_center = FileCenter {
             db,
             collections: FileCenterCollections {
-                files: collection_files,
+                files:        collection_files,
                 files_chunks: collection_files_chunks,
-                settings: collection_settings,
+                settings:     collection_settings,
             },
             file_size_threshold,
             _create_time: create_time,
@@ -523,7 +528,7 @@ impl FileCenter {
             Bson::ObjectId(b) => b,
             _ => {
                 return Err(FileCenterError::DocumentError(ValueAccessError::UnexpectedType));
-            }
+            },
         };
 
         let create_time = match document
@@ -533,20 +538,16 @@ impl FileCenter {
             Bson::DateTime(b) => b,
             _ => {
                 return Err(FileCenterError::DocumentError(ValueAccessError::UnexpectedType));
-            }
+            },
         };
 
         let expire_at = match document.remove("expire_at") {
-            Some(expire_at) => {
-                match expire_at {
-                    Bson::DateTime(b) => Some(b),
-                    _ => {
-                        return Err(FileCenterError::DocumentError(
-                            ValueAccessError::UnexpectedType,
-                        ));
-                    }
-                }
-            }
+            Some(expire_at) => match expire_at {
+                Bson::DateTime(b) => Some(b),
+                _ => {
+                    return Err(FileCenterError::DocumentError(ValueAccessError::UnexpectedType));
+                },
+            },
             None => None,
         };
 
@@ -554,13 +555,11 @@ impl FileCenter {
             .remove("mime_type")
             .ok_or(FileCenterError::DocumentError(ValueAccessError::NotPresent))?
         {
-            Bson::String(b) => {
-                Mime::from_str(&b)
-                    .map_err(|_| FileCenterError::DocumentError(ValueAccessError::UnexpectedType))?
-            }
+            Bson::String(b) => Mime::from_str(&b)
+                .map_err(|_| FileCenterError::DocumentError(ValueAccessError::UnexpectedType))?,
             _ => {
                 return Err(FileCenterError::DocumentError(ValueAccessError::UnexpectedType));
-            }
+            },
         };
 
         let file_size = document.get_i64("file_size")? as u64;
@@ -572,20 +571,16 @@ impl FileCenter {
             Bson::String(b) => b,
             _ => {
                 return Err(FileCenterError::DocumentError(ValueAccessError::UnexpectedType));
-            }
+            },
         };
 
         let file_data = match document.remove("file_data") {
-            Some(file_data) => {
-                match file_data {
-                    Bson::Binary(b) => FileData::Buffer(b.bytes),
-                    _ => {
-                        return Err(FileCenterError::DocumentError(
-                            ValueAccessError::UnexpectedType,
-                        ));
-                    }
-                }
-            }
+            Some(file_data) => match file_data {
+                Bson::Binary(b) => FileData::Buffer(b.bytes),
+                _ => {
+                    return Err(FileCenterError::DocumentError(ValueAccessError::UnexpectedType));
+                },
+            },
             None => {
                 match document
                     .remove("chunk_id")
@@ -596,13 +591,13 @@ impl FileCenter {
                         return Err(FileCenterError::DocumentError(
                             ValueAccessError::UnexpectedType,
                         ));
-                    }
+                    },
                 };
 
                 let stream = self.open_download_stream(file_id).await?;
 
                 FileData::Stream(Box::new(stream))
-            }
+            },
         };
 
         Ok(FileItem {
@@ -673,19 +668,19 @@ impl FileCenter {
                             if DateTime::now().gt(expire_at) {
                                 return Ok(None);
                             }
-                        }
+                        },
                         None => {
                             return Err(FileCenterError::DocumentError(
                                 ValueAccessError::UnexpectedType,
                             ))
-                        }
+                        },
                     }
                 }
 
                 let file_item = self.create_file_item(file_item).await?;
 
                 Ok(Some(file_item))
-            }
+            },
             None => Ok(None),
         }
     }
@@ -736,7 +731,7 @@ impl FileCenter {
                 }
 
                 Ok(Some(file_size))
-            }
+            },
             None => Ok(None),
         }
     }
@@ -813,7 +808,7 @@ impl FileCenter {
                 Some(id) => id,
                 None => {
                     return Err(FileCenterError::DocumentError(ValueAccessError::UnexpectedType));
-                }
+                },
             });
 
             n += 1;
@@ -830,7 +825,7 @@ impl FileCenter {
                     Some(id) => Ok(id),
                     None => Err(FileCenterError::DocumentError(ValueAccessError::UnexpectedType)),
                 }
-            }
+            },
         }
     }
 
@@ -902,7 +897,7 @@ impl FileCenter {
                             if self.delete_file_chunks(file_id).await.is_err() {}
 
                             return Err(err);
-                        }
+                        },
                     };
 
                     file_item_raw.insert("chunk_id", chunk_id);
@@ -915,7 +910,7 @@ impl FileCenter {
                         "file_data",
                         Bson::Binary(Binary {
                             subtype: BinarySubtype::Generic,
-                            bytes: file_data,
+                            bytes:   file_data,
                         }),
                     );
 
@@ -934,7 +929,7 @@ impl FileCenter {
                 self.collections.files.insert_one(file_item_raw, None).await?;
 
                 Ok(file_id)
-            }
+            },
         }
     }
 
@@ -976,7 +971,7 @@ impl FileCenter {
                     if self.delete_file_chunks(file_id).await.is_err() {}
 
                     return Err(err);
-                }
+                },
             };
 
             file_item_raw.insert("chunk_id", chunk_id);
@@ -988,8 +983,7 @@ impl FileCenter {
             file_item_raw.insert(
                 "file_data",
                 Bson::Binary(Binary {
-                    subtype: BinarySubtype::Generic,
-                    bytes: file_data,
+                    subtype: BinarySubtype::Generic, bytes: file_data
                 }),
             );
 
@@ -1057,7 +1051,7 @@ impl FileCenter {
                 Some(id) => id,
                 None => {
                     return Err(FileCenterError::DocumentError(ValueAccessError::UnexpectedType));
-                }
+                },
             });
         }
 
@@ -1072,7 +1066,7 @@ impl FileCenter {
                     Some(id) => Ok(id),
                     None => Err(FileCenterError::DocumentError(ValueAccessError::UnexpectedType)),
                 }
-            }
+            },
         }
     }
 
@@ -1136,7 +1130,7 @@ impl FileCenter {
                             if self.delete_file_chunks(file_id).await.is_err() {}
 
                             return Err(err);
-                        }
+                        },
                     };
 
                     file_item_raw.insert("chunk_id", chunk_id);
@@ -1146,8 +1140,7 @@ impl FileCenter {
                     file_item_raw.insert(
                         "file_data",
                         Bson::Binary(Binary {
-                            subtype: BinarySubtype::Generic,
-                            bytes: buffer,
+                            subtype: BinarySubtype::Generic, bytes: buffer
                         }),
                     );
                 }
@@ -1161,7 +1154,7 @@ impl FileCenter {
                 self.collections.files.insert_one(file_item_raw, None).await?;
 
                 Ok(file_id)
-            }
+            },
         }
     }
 
@@ -1195,7 +1188,7 @@ impl FileCenter {
                     if self.delete_file_chunks(file_id).await.is_err() {}
 
                     return Err(err);
-                }
+                },
             };
 
             file_item_raw.insert("chunk_id", chunk_id);
@@ -1205,8 +1198,7 @@ impl FileCenter {
             file_item_raw.insert(
                 "file_data",
                 Bson::Binary(Binary {
-                    subtype: BinarySubtype::Generic,
-                    bytes: buffer,
+                    subtype: BinarySubtype::Generic, bytes: buffer
                 }),
             );
         }
@@ -1283,7 +1275,7 @@ impl FileCenter {
             Some(id) => id,
             None => {
                 return Err(FileCenterError::DocumentError(ValueAccessError::UnexpectedType));
-            }
+            },
         };
 
         let mut n = 1i64;
@@ -1324,7 +1316,7 @@ impl FileCenter {
                 Some(id) => id,
                 None => {
                     return Err(FileCenterError::DocumentError(ValueAccessError::UnexpectedType));
-                }
+                },
             };
 
             n += 1;
@@ -1368,7 +1360,7 @@ impl FileCenter {
             Some(id) => id,
             None => {
                 return Err(FileCenterError::DocumentError(ValueAccessError::UnexpectedType));
-            }
+            },
         };
 
         let mut n = 1i64;
@@ -1407,7 +1399,7 @@ impl FileCenter {
                 Some(id) => id,
                 None => {
                     return Err(FileCenterError::DocumentError(ValueAccessError::UnexpectedType));
-                }
+                },
             };
 
             n += 1;
@@ -1475,7 +1467,7 @@ impl FileCenter {
                         if self.delete_file_chunks(file_id).await.is_err() {}
 
                         return Err(err);
-                    }
+                    },
                 };
 
             file_item_raw.insert("file_size", file_size);
@@ -1493,8 +1485,7 @@ impl FileCenter {
             file_item_raw.insert(
                 "file_data",
                 Bson::Binary(Binary {
-                    subtype: BinarySubtype::Generic,
-                    bytes: file_data,
+                    subtype: BinarySubtype::Generic, bytes: file_data
                 }),
             );
 
@@ -1529,7 +1520,7 @@ impl FileCenter {
                 if is_stream && self.delete_file_chunks(file_id).await.is_err() {}
 
                 Ok(result.get_object_id("_id")?)
-            }
+            },
             None => {
                 file_item_raw.insert("hash_1", hash_1);
                 file_item_raw.insert("hash_2", hash_2);
@@ -1545,7 +1536,7 @@ impl FileCenter {
                 self.collections.files.insert_one(file_item_raw, None).await?;
 
                 Ok(file_id)
-            }
+            },
         }
     }
 
@@ -1605,7 +1596,7 @@ impl FileCenter {
                         if self.delete_file_chunks(file_id).await.is_err() {}
 
                         return Err(err);
-                    }
+                    },
                 };
 
             file_item_raw.insert("file_size", file_size);
@@ -1619,8 +1610,7 @@ impl FileCenter {
             file_item_raw.insert(
                 "file_data",
                 Bson::Binary(Binary {
-                    subtype: BinarySubtype::Generic,
-                    bytes: file_data,
+                    subtype: BinarySubtype::Generic, bytes: file_data
                 }),
             );
         };

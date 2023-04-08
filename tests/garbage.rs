@@ -1,9 +1,10 @@
 mod common;
 
-use mongo_file_center::bson::{doc, Document};
-use mongo_file_center::{FileCenter, COLLECTION_FILES_CHUNKS_NAME, COLLECTION_FILES_NAME};
-
 use common::*;
+use mongo_file_center::{
+    bson::{doc, Document},
+    FileCenter, COLLECTION_FILES_CHUNKS_NAME, COLLECTION_FILES_NAME,
+};
 
 #[tokio::test]
 async fn garbage() {

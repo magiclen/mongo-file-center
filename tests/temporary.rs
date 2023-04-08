@@ -1,10 +1,8 @@
 mod common;
 
-use tokio::fs::{self, File};
-
-use mongo_file_center::FileCenter;
-
 use common::*;
+use mongo_file_center::FileCenter;
+use tokio::fs::{self, File};
 
 #[tokio::test]
 async fn temporary() {

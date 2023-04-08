@@ -29,7 +29,7 @@ impl FileData {
                 }
 
                 Ok(buffer)
-            }
+            },
         }
     }
 }

@@ -1,10 +1,8 @@
 mod common;
 
-use tokio::fs::{self, File};
-
-use mongo_file_center::{FileCenter, FileData, DEFAULT_FILE_SIZE_THRESHOLD};
-
 use common::*;
+use mongo_file_center::{FileCenter, FileData, DEFAULT_FILE_SIZE_THRESHOLD};
+use tokio::fs::{self, File};
 
 #[tokio::test]
 async fn duplication_deletion() {

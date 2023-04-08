@@ -1,12 +1,13 @@
-use std::mem::transmute;
-use std::path::Path;
+use std::{mem::transmute, path::Path};
 
-use crate::tokio::fs::File;
-use crate::tokio::io::{self, AsyncReadExt};
-
-use crate::mime::Mime;
-
-use crate::{Digest, Hasher, DEFAULT_MIME_TYPE};
+use crate::{
+    mime::Mime,
+    tokio::{
+        fs::File,
+        io::{self, AsyncReadExt},
+    },
+    Digest, Hasher, DEFAULT_MIME_TYPE,
+};
 
 const BUFFER_SIZE: usize = 4096;
 
@@ -14,7 +15,7 @@ pub(crate) fn get_mime_by_path<P: AsRef<Path>>(file_path: P) -> Mime {
     match file_path.as_ref().extension() {
         Some(extension) => {
             mime_guess::from_ext(extension.to_str().unwrap()).first_or_octet_stream()
-        }
+        },
         None => DEFAULT_MIME_TYPE,
     }
 }

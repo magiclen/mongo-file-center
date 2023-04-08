@@ -1,11 +1,9 @@
 mod common;
 
+use common::*;
+use mongo_file_center::{FileCenter, FileData};
 use tokio::fs::{self, File};
 use tokio_util::io::StreamReader;
-
-use mongo_file_center::{FileCenter, FileData};
-
-use common::*;
 
 #[tokio::test]
 async fn upload_download_data() {
@@ -29,7 +27,7 @@ async fn upload_download_data() {
         match file_item.into_file_data() {
             FileData::Buffer(b) => {
                 assert_eq!(image_small, b);
-            }
+            },
             FileData::Stream(_) => panic!("should be a buffer"),
         }
     }
@@ -53,7 +51,7 @@ async fn upload_download_data() {
                 )
                 .await
                 .unwrap());
-            }
+            },
         }
     }
 
@@ -70,7 +68,7 @@ async fn upload_download_data() {
         match file_item.into_file_data() {
             FileData::Buffer(b) => {
                 assert_eq!(image_small, b);
-            }
+            },
             FileData::Stream(_) => panic!("should be a buffer"),
         }
     }
@@ -92,7 +90,7 @@ async fn upload_download_data() {
                 )
                 .await
                 .unwrap());
-            }
+            },
         }
     }
 
@@ -109,7 +107,7 @@ async fn upload_download_data() {
         match file_item.into_file_data() {
             FileData::Buffer(b) => {
                 assert_eq!(image_small, b);
-            }
+            },
             FileData::Stream(_) => panic!("should be a buffer"),
         }
     }
@@ -133,7 +131,7 @@ async fn upload_download_data() {
                 )
                 .await
                 .unwrap());
-            }
+            },
         }
     }
 
@@ -148,7 +146,7 @@ async fn upload_download_data() {
         match file_item.into_file_data() {
             FileData::Buffer(b) => {
                 assert_eq!(image_small, b);
-            }
+            },
             FileData::Stream(_) => panic!("should be a buffer"),
         }
 
@@ -172,7 +170,7 @@ async fn upload_download_data() {
                 )
                 .await
                 .unwrap());
-            }
+            },
         }
 
         file_center.delete_file_item_by_id(file_id).await.unwrap();
@@ -188,7 +186,7 @@ async fn upload_download_data() {
         match file_item.into_file_data() {
             FileData::Buffer(b) => {
                 assert_eq!(image_small, b);
-            }
+            },
             FileData::Stream(_) => panic!("should be a buffer"),
         }
 
@@ -211,7 +209,7 @@ async fn upload_download_data() {
                 )
                 .await
                 .unwrap());
-            }
+            },
         }
 
         file_center.delete_file_item_by_id(file_id).await.unwrap();
@@ -230,7 +228,7 @@ async fn upload_download_data() {
         match file_item.into_file_data() {
             FileData::Buffer(b) => {
                 assert_eq!(image_small, b);
-            }
+            },
             FileData::Stream(_) => panic!("should be a buffer"),
         }
 
@@ -256,7 +254,7 @@ async fn upload_download_data() {
                 )
                 .await
                 .unwrap());
-            }
+            },
         }
 
         file_center.delete_file_item_by_id(file_id).await.unwrap();

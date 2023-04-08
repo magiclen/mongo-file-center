@@ -1,9 +1,7 @@
 mod common;
 
-use mongo_file_center::bson::oid::ObjectId;
-use mongo_file_center::{FileCenter, FileData, MAX_FILE_SIZE_THRESHOLD};
-
 use common::*;
+use mongo_file_center::{bson::oid::ObjectId, FileCenter, FileData, MAX_FILE_SIZE_THRESHOLD};
 
 #[tokio::test]
 async fn initialize() {
