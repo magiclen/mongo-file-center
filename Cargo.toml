@@ -9,7 +9,6 @@ homepage = "https://magiclen.org/mongo-file-center"
 keywords = ["mongodb", "storage", "file"]
 categories = ["filesystem", "database"]
 description = "To store perennial files and temporary files in MongoDB."
-readme = "README.md"
 license = "MIT"
 include = ["src/**/*", "Cargo.toml", "README.md", "LICENSE"]
 
