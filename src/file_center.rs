@@ -763,12 +763,7 @@ impl FileCenter {
 
         let buffer_size = self.file_size_threshold as usize;
 
-        let mut buffer: Vec<u8> = Vec::with_capacity(buffer_size);
-
-        #[allow(clippy::uninit_vec)]
-        unsafe {
-            buffer.set_len(buffer_size);
-        }
+        let mut buffer: Vec<u8> = vec![0u8; buffer_size];
 
         let mut n = 0i64;
 
@@ -1250,12 +1245,7 @@ impl FileCenter {
         let collection_files_chunks = &self.collections.files_chunks;
 
         let buffer_size = self.file_size_threshold as usize;
-        let mut buffer: Vec<u8> = Vec::with_capacity(buffer_size);
-
-        #[allow(clippy::uninit_vec)]
-        unsafe {
-            buffer.set_len(buffer_size);
-        }
+        let mut buffer: Vec<u8> = vec![0u8; buffer_size];
 
         buffer[0] = first_chunk_plus_one[buffer_size];
 
@@ -1339,12 +1329,7 @@ impl FileCenter {
         let collection_files_chunks = &self.collections.files_chunks;
 
         let buffer_size = self.file_size_threshold as usize;
-        let mut buffer: Vec<u8> = Vec::with_capacity(buffer_size);
-
-        #[allow(clippy::uninit_vec)]
-        unsafe {
-            buffer.set_len(buffer_size);
-        }
+        let mut buffer: Vec<u8> = vec![0u8; buffer_size];
 
         buffer[0] = first_chunk_plus_one[buffer_size];
 
@@ -1420,12 +1405,7 @@ impl FileCenter {
     ) -> Result<ObjectId, FileCenterError> {
         let buffer_size = self.file_size_threshold as usize + 1;
 
-        let mut file_data = Vec::with_capacity(buffer_size);
-
-        #[allow(clippy::uninit_vec)]
-        unsafe {
-            file_data.set_len(buffer_size);
-        }
+        let mut file_data = vec![0u8; buffer_size];
 
         let mut cc = 0;
 
@@ -1549,12 +1529,7 @@ impl FileCenter {
     ) -> Result<ObjectId, FileCenterError> {
         let buffer_size = self.file_size_threshold as usize + 1;
 
-        let mut file_data = Vec::with_capacity(buffer_size);
-
-        #[allow(clippy::uninit_vec)]
-        unsafe {
-            file_data.set_len(buffer_size);
-        }
+        let mut file_data = vec![0u8; buffer_size];
 
         let mut cc = 0;
 
