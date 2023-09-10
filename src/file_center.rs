@@ -663,7 +663,9 @@ impl FileCenter {
                                 )
                                 .await
                                 .is_err()
-                            {}
+                            {
+                                // do nothing
+                            }
 
                             if DateTime::now().gt(expire_at) {
                                 return Ok(None);
@@ -889,7 +891,9 @@ impl FileCenter {
                     let chunk_id = match self.upload_from_stream(file_id, file).await {
                         Ok(id) => id,
                         Err(err) => {
-                            if self.delete_file_chunks(file_id).await.is_err() {}
+                            if self.delete_file_chunks(file_id).await.is_err() {
+                                // do nothing
+                            }
 
                             return Err(err);
                         },
@@ -963,7 +967,9 @@ impl FileCenter {
             let chunk_id = match self.upload_from_stream(file_id, file).await {
                 Ok(id) => id,
                 Err(err) => {
-                    if self.delete_file_chunks(file_id).await.is_err() {}
+                    if self.delete_file_chunks(file_id).await.is_err() {
+                        // do nothing
+                    }
 
                     return Err(err);
                 },
@@ -1122,7 +1128,9 @@ impl FileCenter {
                     let chunk_id = match self.upload_from_buffer(file_id, &buffer).await {
                         Ok(id) => id,
                         Err(err) => {
-                            if self.delete_file_chunks(file_id).await.is_err() {}
+                            if self.delete_file_chunks(file_id).await.is_err() {
+                                // do nothing
+                            }
 
                             return Err(err);
                         },
@@ -1180,7 +1188,9 @@ impl FileCenter {
             let chunk_id = match self.upload_from_buffer(file_id, &buffer).await {
                 Ok(id) => id,
                 Err(err) => {
-                    if self.delete_file_chunks(file_id).await.is_err() {}
+                    if self.delete_file_chunks(file_id).await.is_err() {
+                        // do nothing
+                    }
 
                     return Err(err);
                 },
@@ -1444,7 +1454,9 @@ impl FileCenter {
                 match self.upload_from_stream_and_hash(file_id, file_data, reader).await {
                     Ok(id) => id,
                     Err(err) => {
-                        if self.delete_file_chunks(file_id).await.is_err() {}
+                        if self.delete_file_chunks(file_id).await.is_err() {
+                            // do nothing
+                        }
 
                         return Err(err);
                     },
@@ -1497,7 +1509,9 @@ impl FileCenter {
 
         match result {
             Some(result) => {
-                if is_stream && self.delete_file_chunks(file_id).await.is_err() {}
+                if is_stream && self.delete_file_chunks(file_id).await.is_err() {
+                    // do nothing
+                }
 
                 Ok(result.get_object_id("_id")?)
             },
@@ -1568,7 +1582,9 @@ impl FileCenter {
                 match self.upload_from_stream_and_no_hash(file_id, file_data, reader).await {
                     Ok(id) => id,
                     Err(err) => {
-                        if self.delete_file_chunks(file_id).await.is_err() {}
+                        if self.delete_file_chunks(file_id).await.is_err() {
+                            // do nothing
+                        }
 
                         return Err(err);
                     },

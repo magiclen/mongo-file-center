@@ -16,7 +16,6 @@ jobs:
         os:
           - ubuntu-latest
         toolchain:
-          - 1.63
           - stable
           - nightly
         features:
@@ -24,10 +23,30 @@ jobs:
     name: Test ${{ matrix.toolchain }} on ${{ matrix.os }} (${{ matrix.features }})
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: ${{ matrix.toolchain }}
       - uses: supercharge/mongodb-github-action@v1.10.0
       - run: cargo test --release ${{ matrix.features }}
       - run: cargo doc --release ${{ matrix.features }}
+
+  MSRV:
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+        toolchain:
+          - 1.67
+        features:
+          -
+    name: Test ${{ matrix.toolchain }} on ${{ matrix.os }} (${{ matrix.features }})
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: ${{ matrix.toolchain }}
+      - uses: supercharge/mongodb-github-action@v1.10.0
+      - run: cargo test --release --lib --bins ${{ matrix.features }}
